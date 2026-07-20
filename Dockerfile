@@ -15,7 +15,6 @@ ENV NODE_ENV=production
 RUN apk add --no-cache openssl
 COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
-RUN npm prune --omit=dev
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 
