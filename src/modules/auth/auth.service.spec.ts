@@ -7,10 +7,14 @@ import { AuthService } from "./auth.service";
 
 const verifyIdTokenMock = jest.fn();
 
-jest.mock("google-auth-library", () => ({
-  OAuth2Client: jest.fn().mockImplementation(() => ({
-    verifyIdToken: verifyIdTokenMock,
-  })),
+jest.mock("firebase-admin/app", () => ({
+  getApps: jest.fn(() => [{}]),
+  initializeApp: jest.fn(),
+  cert: jest.fn(),
+}));
+
+jest.mock("firebase-admin/auth", () => ({
+  getAuth: jest.fn(() => ({ verifyIdToken: verifyIdTokenMock })),
 }));
 
 function createFakeConfigService(): ConfigService {
@@ -30,7 +34,7 @@ type FakeUser = {
   id: string;
   name: string;
   email: string | null;
-  googleId: string | null;
+  firebaseUid: string | null;
   avatarUrl: string | null;
   role: UserRole;
   status: UserStatus;
@@ -43,16 +47,16 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
   );
   let nextId = 1;
 
-  const findUser = (where: { googleId?: string; email?: string; id?: string }) =>
+  const findUser = (where: { firebaseUid?: string; email?: string; id?: string }) =>
     [...users.values()].find(
       (user) =>
-        (where.googleId !== undefined && user.googleId === where.googleId) ||
+        (where.firebaseUid !== undefined && user.firebaseUid === where.firebaseUid) ||
         (where.email !== undefined && user.email === where.email) ||
         (where.id !== undefined && user.id === where.id),
     ) ?? null;
 
   const userDelegate = {
-    findFirst: jest.fn((args: { where: { googleId?: string; email?: string } }) =>
+    findFirst: jest.fn((args: { where: { firebaseUid?: string; email?: string } }) =>
       Promise.resolve(findUser(args.where)),
     ),
     findUniqueOrThrow: jest.fn((args: { where: { id: string } }) => {
@@ -72,7 +76,7 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
         id,
         name: args.data.name ?? "",
         email: args.data.email ?? null,
-        googleId: args.data.googleId ?? null,
+        firebaseUid: args.data.firebaseUid ?? null,
         avatarUrl: args.data.avatarUrl ?? null,
         role: args.data.role ?? UserRole.STUDENT,
         status: args.data.status ?? UserStatus.ACTIVE,
@@ -104,7 +108,7 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
 }
 
 const validPayload = {
-  sub: "google-sub-1",
+  uid: "firebase-uid-1",
   email: "siswa@example.com",
   name: "Siswa Baru",
   picture: "https://example.com/avatar.png",
@@ -117,7 +121,7 @@ describe("AuthService.loginWithGoogle", () => {
   });
 
   it("creates a new STUDENT user + StudentProfile when no account matches", async () => {
-    verifyIdTokenMock.mockResolvedValue({ getPayload: () => validPayload });
+    verifyIdTokenMock.mockResolvedValue(validPayload);
     const { prisma, users } = createFakePrisma();
     const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
 
@@ -130,13 +134,13 @@ describe("AuthService.loginWithGoogle", () => {
     expect([...users.values()][0].studentProfile).not.toBeNull();
   });
 
-  it("logs in directly when a user already has this googleId", async () => {
-    verifyIdTokenMock.mockResolvedValue({ getPayload: () => validPayload });
+  it("logs in directly when a user already has this firebaseUid", async () => {
+    verifyIdTokenMock.mockResolvedValue(validPayload);
     const existing: FakeUser = {
       id: "user-existing",
       name: "Siswa Lama",
       email: "siswa@example.com",
-      googleId: "google-sub-1",
+      firebaseUid: "firebase-uid-1",
       avatarUrl: null,
       role: UserRole.STUDENT,
       status: UserStatus.ACTIVE,
@@ -152,13 +156,13 @@ describe("AuthService.loginWithGoogle", () => {
     expect(result.user.schoolId).toBe("school-1");
   });
 
-  it("links googleId to an existing account found by email", async () => {
-    verifyIdTokenMock.mockResolvedValue({ getPayload: () => validPayload });
+  it("links firebaseUid to an existing account found by email", async () => {
+    verifyIdTokenMock.mockResolvedValue(validPayload);
     const existing: FakeUser = {
       id: "user-email-match",
       name: "Siswa Email",
       email: "siswa@example.com",
-      googleId: null,
+      firebaseUid: null,
       avatarUrl: null,
       role: UserRole.STUDENT,
       status: UserStatus.ACTIVE,
@@ -170,13 +174,11 @@ describe("AuthService.loginWithGoogle", () => {
     const result = await service.loginWithGoogle({ idToken: "token" });
 
     expect(result.isNewUser).toBe(false);
-    expect(users.get("user-email-match")?.googleId).toBe("google-sub-1");
+    expect(users.get("user-email-match")?.firebaseUid).toBe("firebase-uid-1");
   });
 
   it("rejects when the Google email is not verified", async () => {
-    verifyIdTokenMock.mockResolvedValue({
-      getPayload: () => ({ ...validPayload, email_verified: false }),
-    });
+    verifyIdTokenMock.mockResolvedValue({ ...validPayload, email_verified: false });
     const { prisma } = createFakePrisma();
     const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
 
@@ -185,7 +187,7 @@ describe("AuthService.loginWithGoogle", () => {
     );
   });
 
-  it("rejects when the Google token fails verification", async () => {
+  it("rejects when the Firebase token fails verification", async () => {
     verifyIdTokenMock.mockRejectedValue(new Error("invalid token"));
     const { prisma } = createFakePrisma();
     const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);

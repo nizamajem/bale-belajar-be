@@ -138,7 +138,7 @@ model User {
   email            String?   @unique
   phone            String?
   passwordHash     String?
-  googleId         String?   @unique
+  firebaseUid      String?   @unique
   avatarUrl        String?
   role             UserRole
   status           UserStatus @default(ACTIVE)

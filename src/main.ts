@@ -47,4 +47,7 @@ async function bootstrap() {
   console.log(`Swagger docs running on http://localhost:${port}/docs`);
 }
 
-void bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error("Gagal menjalankan aplikasi:", error);
+  process.exit(1);
+});

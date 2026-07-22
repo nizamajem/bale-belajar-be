@@ -3,13 +3,13 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService, JwtSignOptions } from "@nestjs/jwt";
 import { UserRole, UserStatus } from "@prisma/client";
 import * as bcrypt from "bcrypt";
-import { OAuth2Client } from "google-auth-library";
 import { PrismaService } from "../../database/prisma/prisma.service";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
 import { StudentLoginDto } from "./dto/student-login.dto";
 import { AuthTokenPayload } from "./types/auth-token-payload.type";
+import { getFirebaseAuth } from "./firebase-admin.util";
 
 type AuthResponse = {
   accessToken: string;
@@ -131,18 +131,16 @@ export class AuthService {
   }
 
   /**
-   * Registrasi/login siswa umum lewat Google Sign-In. Sekolah TIDAK
-   * diwajibkan di sini - StudentProfile dibuat tanpa schoolId/participantCode
-   * dan siswa bisa menghubungkannya belakangan lewat modul student-account.
+   * Registrasi/login siswa umum lewat Google Sign-In (via Firebase
+   * Authentication). Sekolah TIDAK diwajibkan di sini - StudentProfile
+   * dibuat tanpa schoolId/participantCode dan siswa bisa menghubungkannya
+   * belakangan lewat modul student-account.
    */
   async loginWithGoogle(
     dto: GoogleLoginDto,
   ): Promise<AuthResponse & { isNewUser: boolean }> {
-    const googleClientId = this.configService.get<string>("GOOGLE_CLIENT_ID");
-    const client = new OAuth2Client(googleClientId);
-
     let payload: {
-      sub: string;
+      uid: string;
       email?: string;
       name?: string;
       picture?: string;
@@ -150,17 +148,12 @@ export class AuthService {
     };
 
     try {
-      const ticket = await client.verifyIdToken({
-        idToken: dto.idToken,
-        audience: googleClientId,
-      });
-      const ticketPayload = ticket.getPayload();
-      if (!ticketPayload) {
-        throw new Error("Payload token Google kosong.");
-      }
-      payload = ticketPayload;
+      const decoded = await getFirebaseAuth(this.configService).verifyIdToken(
+        dto.idToken,
+      );
+      payload = decoded;
     } catch {
-      throw new UnauthorizedException("Token Google tidak valid.");
+      throw new UnauthorizedException("Token Firebase tidak valid.");
     }
 
     if (!payload.email || payload.email_verified === false) {
@@ -168,7 +161,7 @@ export class AuthService {
     }
 
     let user = await this.prisma.user.findFirst({
-      where: { googleId: payload.sub },
+      where: { firebaseUid: payload.uid },
       include: { studentProfile: true },
     });
     let isNewUser = false;
@@ -182,7 +175,7 @@ export class AuthService {
       if (existingByEmail) {
         user = await this.prisma.user.update({
           where: { id: existingByEmail.id },
-          data: { googleId: payload.sub, avatarUrl: payload.picture },
+          data: { firebaseUid: payload.uid, avatarUrl: payload.picture },
           include: { studentProfile: true },
         });
       } else {
@@ -192,7 +185,7 @@ export class AuthService {
             data: {
               name: payload.name ?? payload.email!.split("@")[0],
               email: payload.email,
-              googleId: payload.sub,
+              firebaseUid: payload.uid,
               avatarUrl: payload.picture,
               role: UserRole.STUDENT,
               status: UserStatus.ACTIVE,
