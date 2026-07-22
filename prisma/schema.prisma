@@ -91,6 +91,47 @@ enum RecommendationGeneratedBy {
   AI_FUTURE
 }
 
+enum MissionStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ActivityType {
+  MULTIPLE_CHOICE
+}
+
+enum LearningMasteryStatus {
+  MASTERED
+  DEVELOPING
+  NEEDS_PRACTICE
+  INSUFFICIENT_EVIDENCE
+}
+
+enum ConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum XpReason {
+  MISSION_COMPLETED
+  ACTIVITY_CORRECT
+  STREAK_BONUS
+  MANUAL_ADJUSTMENT
+}
+
+enum AiFeature {
+  MISSION_NARRATIVE
+  ACTIVITY_HINT
+}
+
+enum GuardrailStatus {
+  PASSED
+  BLOCKED
+  FALLBACK
+}
+
 model User {
   id               String    @id @default(uuid()) @db.Uuid
   name             String
@@ -183,6 +224,13 @@ model StudentProfile {
   school School @relation(fields: [schoolId], references: [id])
   classrooms ClassroomStudent[]
   assignments AssessmentAssignment[]
+  gameProfile StudentGameProfile?
+  worldProgress StudentWorldProgress[]
+  experienceEntries ExperienceLedgerEntry[]
+  masteryStates MasteryState[]
+  masteryEvents MasteryEvent[]
+  missionAssignments DailyMissionAssignment[]
+  aiInteractionLogs AiInteractionLog[]
 
   @@index([schoolId])
   @@index([academicYear])
@@ -235,6 +283,7 @@ model Subject {
   competencies Competency[]
   questions    Question[]
   assessments  Assessment[]
+  worlds       World[]
 }
 
 model Competency {
@@ -256,6 +305,9 @@ model Competency {
   requiredBy    CompetencyPrerequisite[] @relation("PrerequisiteCompetencies")
   competencyResults CompetencyResult[]
   recommendations LearningRecommendation[]
+  missions      Mission[]
+  masteryStates MasteryState[]
+  masteryEvents MasteryEvent[]
 
   @@unique([subjectId, code])
   @@index([subjectId])
@@ -552,4 +604,250 @@ model AuditLog {
   @@index([userId])
   @@index([entity, entityId])
   @@index([createdAt])
+}
+
+// =========================================================================
+// BaleTeman / BaleVerse domain (game layer, learning layer, mastery layer,
+// AI orchestration layer) — additive, dibangun di atas User/StudentProfile/
+// Subject/Competency yang sudah ada. Terpisah dari Assessment/CompetencyResult
+// (ujian formal sekolah) supaya XP, mastery harian, dan skor ujian formal
+// tidak pernah tercampur dalam satu sumber data.
+// =========================================================================
+
+model World {
+  id               String   @id @default(uuid()) @db.Uuid
+  subjectId        String   @db.Uuid
+  key              String   @unique
+  name             String
+  characterClass   String
+  themeDescription String?
+  isActive         Boolean  @default(true)
+  orderNumber      Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  subject             Subject                   @relation(fields: [subjectId], references: [id])
+  worldProgress       StudentWorldProgress[]
+  experienceEntries   ExperienceLedgerEntry[]
+  missions            Mission[]
+  missionAssignments  DailyMissionAssignment[]
+
+  @@index([subjectId])
+}
+
+model StudentGameProfile {
+  id                  String   @id @default(uuid()) @db.Uuid
+  studentProfileId    String   @unique @db.Uuid
+  accountLevel        Int      @default(1)
+  accountXp           Int      @default(0)
+  dayaBale            Int      @default(0)
+  streakCurrent       Int      @default(0)
+  streakLongest       Int      @default(0)
+  streakTargetPerWeek Int      @default(3)
+  lastActivityDate    DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  student StudentProfile @relation(fields: [studentProfileId], references: [id])
+}
+
+model StudentWorldProgress {
+  id               String   @id @default(uuid()) @db.Uuid
+  studentProfileId String   @db.Uuid
+  worldId          String   @db.Uuid
+  worldLevel       Int      @default(1)
+  worldXp          Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  student StudentProfile @relation(fields: [studentProfileId], references: [id])
+  world   World          @relation(fields: [worldId], references: [id])
+
+  @@unique([studentProfileId, worldId])
+  @@index([worldId])
+}
+
+model ExperienceLedgerEntry {
+  id               String   @id @default(uuid()) @db.Uuid
+  studentProfileId String   @db.Uuid
+  worldId          String?  @db.Uuid
+  amount           Int
+  reason           XpReason
+  sourceType       String
+  sourceId         String?
+  createdAt        DateTime @default(now())
+
+  student StudentProfile @relation(fields: [studentProfileId], references: [id])
+  world   World?          @relation(fields: [worldId], references: [id])
+
+  @@index([studentProfileId])
+  @@index([worldId])
+}
+
+model MasteryState {
+  id               String                @id @default(uuid()) @db.Uuid
+  studentProfileId String                @db.Uuid
+  competencyId     String                @db.Uuid
+  masteryScore     Decimal               @default(0) @db.Decimal(5, 2)
+  status           LearningMasteryStatus @default(INSUFFICIENT_EVIDENCE)
+  confidence       ConfidenceLevel       @default(LOW)
+  evidenceCount    Int                   @default(0)
+  scoringVersion   Int                   @default(1)
+  lastEvaluatedAt  DateTime              @default(now())
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  student    StudentProfile @relation(fields: [studentProfileId], references: [id])
+  competency Competency     @relation(fields: [competencyId], references: [id])
+  events     MasteryEvent[]
+
+  @@unique([studentProfileId, competencyId])
+  @@index([competencyId])
+}
+
+model MasteryEvent {
+  id               String                @id @default(uuid()) @db.Uuid
+  masteryStateId   String                @db.Uuid
+  studentProfileId String                @db.Uuid
+  competencyId     String                @db.Uuid
+  scoreDelta       Decimal               @db.Decimal(5, 2)
+  newScore         Decimal               @db.Decimal(5, 2)
+  newStatus        LearningMasteryStatus
+  confidence       ConfidenceLevel
+  scoringVersion   Int
+  sourceType       String
+  sourceId         String
+  createdAt        DateTime              @default(now())
+
+  masteryState MasteryState    @relation(fields: [masteryStateId], references: [id])
+  student      StudentProfile  @relation(fields: [studentProfileId], references: [id])
+  competency   Competency      @relation(fields: [competencyId], references: [id])
+
+  @@index([masteryStateId])
+  @@index([studentProfileId])
+}
+
+model Mission {
+  id                String        @id @default(uuid()) @db.Uuid
+  worldId           String        @db.Uuid
+  competencyId      String        @db.Uuid
+  title             String
+  narrativeTemplate String
+  estimatedMinutes  Int           @default(10)
+  status            MissionStatus @default(DRAFT)
+  createdBy         String?       @db.Uuid
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  world       World                    @relation(fields: [worldId], references: [id])
+  competency  Competency               @relation(fields: [competencyId], references: [id])
+  activities  Activity[]
+  assignments DailyMissionAssignment[]
+
+  @@index([worldId])
+  @@index([competencyId])
+  @@index([status])
+}
+
+model Activity {
+  id          String       @id @default(uuid()) @db.Uuid
+  missionId   String       @db.Uuid
+  orderNumber Int
+  prompt      String
+  type        ActivityType @default(MULTIPLE_CHOICE)
+  explanation String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  mission Mission          @relation(fields: [missionId], references: [id])
+  options ActivityOption[]
+  answers MissionActivityAnswer[]
+
+  @@unique([missionId, orderNumber])
+}
+
+model ActivityOption {
+  id          String  @id @default(uuid()) @db.Uuid
+  activityId  String  @db.Uuid
+  optionKey   String
+  optionText  String
+  isCorrect   Boolean @default(false)
+  orderNumber Int
+
+  activity Activity                @relation(fields: [activityId], references: [id])
+  answers  MissionActivityAnswer[]
+
+  @@unique([activityId, optionKey])
+}
+
+model DailyMissionAssignment {
+  id               String           @id @default(uuid()) @db.Uuid
+  studentProfileId String           @db.Uuid
+  worldId          String           @db.Uuid
+  missionId        String           @db.Uuid
+  assignedDate     DateTime         @db.Date
+  status           AssignmentStatus @default(ASSIGNED)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  student StudentProfile  @relation(fields: [studentProfileId], references: [id])
+  world   World           @relation(fields: [worldId], references: [id])
+  mission Mission         @relation(fields: [missionId], references: [id])
+  attempt MissionAttempt?
+
+  @@unique([studentProfileId, worldId, assignedDate])
+  @@index([missionId])
+}
+
+model MissionAttempt {
+  id                        String        @id @default(uuid()) @db.Uuid
+  dailyMissionAssignmentId  String        @unique @db.Uuid
+  status                    AttemptStatus @default(IN_PROGRESS)
+  startedAt                 DateTime      @default(now())
+  submittedAt               DateTime?
+  correctCount              Int?
+  totalActivities           Int?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  assignment DailyMissionAssignment  @relation(fields: [dailyMissionAssignmentId], references: [id])
+  answers    MissionActivityAnswer[]
+
+  @@index([status])
+}
+
+model MissionActivityAnswer {
+  id               String    @id @default(uuid()) @db.Uuid
+  missionAttemptId String    @db.Uuid
+  activityId       String    @db.Uuid
+  selectedOptionId String?   @db.Uuid
+  isCorrect        Boolean?
+  answeredAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  attempt        MissionAttempt  @relation(fields: [missionAttemptId], references: [id])
+  activity       Activity        @relation(fields: [activityId], references: [id])
+  selectedOption ActivityOption? @relation(fields: [selectedOptionId], references: [id])
+
+  @@unique([missionAttemptId, activityId])
+  @@index([activityId])
+}
+
+model AiInteractionLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  studentProfileId String?         @db.Uuid
+  feature          AiFeature
+  provider         String
+  promptVersion    String
+  requestSummary   Json
+  responseSummary  Json
+  guardrailStatus  GuardrailStatus
+  latencyMs        Int
+  createdAt        DateTime        @default(now())
+
+  student StudentProfile? @relation(fields: [studentProfileId], references: [id])
+
+  @@index([studentProfileId])
+  @@index([feature])
 }

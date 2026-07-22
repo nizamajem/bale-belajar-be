@@ -12,6 +12,12 @@ import { SchoolsModule } from "./modules/schools/schools.module";
 import { StudentsModule } from "./modules/students/students.module";
 import { StudentAssessmentsModule } from "./modules/student-assessments/student-assessments.module";
 import { SubjectsModule } from "./modules/subjects/subjects.module";
+import { AiOrchestratorModule } from "./modules/ai-orchestrator/ai-orchestrator.module";
+import { ExperienceLedgerModule } from "./modules/experience-ledger/experience-ledger.module";
+import { GameProfileModule } from "./modules/game-profile/game-profile.module";
+import { MasteryModule } from "./modules/mastery/mastery.module";
+import { StudentMissionsModule } from "./modules/student-missions/student-missions.module";
+import { WorldsModule } from "./modules/worlds/worlds.module";
 
 @Module({
   imports: [
@@ -30,6 +36,12 @@ import { SubjectsModule } from "./modules/subjects/subjects.module";
     CompetenciesModule,
     QuestionsModule,
     StudentAssessmentsModule,
+    ExperienceLedgerModule,
+    GameProfileModule,
+    WorldsModule,
+    MasteryModule,
+    AiOrchestratorModule,
+    StudentMissionsModule,
   ],
 })
 export class AppModule {}

@@ -1,4 +1,6 @@
 import {
+  ActivityType,
+  MissionStatus,
   PrismaClient,
   QuestionDifficulty,
   QuestionStatus,
@@ -344,6 +346,157 @@ async function main() {
       },
     },
   });
+
+  await seedBaleVerse(subject.id);
+}
+
+async function seedBaleVerse(mtkSubjectId: string) {
+  const world = await prisma.world.upsert({
+    where: { key: "numeria" },
+    update: {},
+    create: {
+      subjectId: mtkSubjectId,
+      key: "numeria",
+      name: "Numeria",
+      characterClass: "Arsitek Logika",
+      themeDescription:
+        "Dunia Matematika: Desa Angka, Gerbang Aljabar, Hutan Fungsi, Menara Grafik.",
+      orderNumber: 1,
+    },
+  });
+
+  const persamaanLinear = await prisma.competency.upsert({
+    where: {
+      subjectId_code: { subjectId: mtkSubjectId, code: "MTK-10-PLDV" },
+    },
+    update: {},
+    create: {
+      subjectId: mtkSubjectId,
+      code: "MTK-10-PLDV",
+      name: "Persamaan Linear",
+      description: "Persamaan dan pertidaksamaan linear satu/dua variabel.",
+      gradeLevel: 10,
+      orderNumber: 100,
+    },
+  });
+
+  const fungsi = await prisma.competency.upsert({
+    where: {
+      subjectId_code: { subjectId: mtkSubjectId, code: "MTK-10-FUNGSI" },
+    },
+    update: {},
+    create: {
+      subjectId: mtkSubjectId,
+      code: "MTK-10-FUNGSI",
+      name: "Fungsi",
+      description: "Konsep fungsi, domain, kodomain, dan grafik fungsi.",
+      gradeLevel: 10,
+      orderNumber: 101,
+    },
+  });
+
+  await prisma.competencyPrerequisite.upsert({
+    where: {
+      competencyId_prerequisiteCompetencyId: {
+        competencyId: fungsi.id,
+        prerequisiteCompetencyId: persamaanLinear.id,
+      },
+    },
+    update: {},
+    create: {
+      competencyId: fungsi.id,
+      prerequisiteCompetencyId: persamaanLinear.id,
+    },
+  });
+
+  const mission = await prisma.mission.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000001" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000001",
+      worldId: world.id,
+      competencyId: persamaanLinear.id,
+      title: "Perbaiki Jembatan Persamaan",
+      narrativeTemplate:
+        "Jembatan menuju Gerbang Aljabar retak! Bantu perbaiki dengan menyelesaikan persamaan linear di setiap papan jembatan.",
+      estimatedMinutes: 12,
+      status: MissionStatus.ACTIVE,
+    },
+  });
+
+  const activityInputs = [
+    {
+      orderNumber: 1,
+      prompt: "Berapakah nilai x pada persamaan 2x + 4 = 12?",
+      explanation: "2x + 4 = 12 -> 2x = 8 -> x = 4.",
+      options: [
+        { optionKey: "A", optionText: "2", isCorrect: false },
+        { optionKey: "B", optionText: "4", isCorrect: true },
+        { optionKey: "C", optionText: "6", isCorrect: false },
+        { optionKey: "D", optionText: "8", isCorrect: false },
+      ],
+    },
+    {
+      orderNumber: 2,
+      prompt: "Berapakah nilai x pada persamaan 3x - 5 = 10?",
+      explanation: "3x - 5 = 10 -> 3x = 15 -> x = 5.",
+      options: [
+        { optionKey: "A", optionText: "3", isCorrect: false },
+        { optionKey: "B", optionText: "4", isCorrect: false },
+        { optionKey: "C", optionText: "5", isCorrect: true },
+        { optionKey: "D", optionText: "6", isCorrect: false },
+      ],
+    },
+    {
+      orderNumber: 3,
+      prompt: "Manakah bentuk yang setara dengan 5x + 10 = 0?",
+      explanation: "5x + 10 = 0 -> 5x = -10 -> x = -2, sehingga x + 2 = 0.",
+      options: [
+        { optionKey: "A", optionText: "x + 2 = 0", isCorrect: true },
+        { optionKey: "B", optionText: "x - 2 = 0", isCorrect: false },
+        { optionKey: "C", optionText: "x + 10 = 0", isCorrect: false },
+        { optionKey: "D", optionText: "5x = 10", isCorrect: false },
+      ],
+    },
+  ];
+
+  for (const activityInput of activityInputs) {
+    const activity = await prisma.activity.upsert({
+      where: {
+        missionId_orderNumber: {
+          missionId: mission.id,
+          orderNumber: activityInput.orderNumber,
+        },
+      },
+      update: {},
+      create: {
+        missionId: mission.id,
+        orderNumber: activityInput.orderNumber,
+        prompt: activityInput.prompt,
+        type: ActivityType.MULTIPLE_CHOICE,
+        explanation: activityInput.explanation,
+      },
+    });
+
+    for (const [index, option] of activityInput.options.entries()) {
+      await prisma.activityOption.upsert({
+        where: {
+          activityId_optionKey: {
+            activityId: activity.id,
+            optionKey: option.optionKey,
+          },
+        },
+        update: {},
+        create: {
+          activityId: activity.id,
+          optionKey: option.optionKey,
+          optionText: option.optionText,
+          isCorrect: option.isCorrect,
+          orderNumber: index + 1,
+        },
+      });
+    }
+  }
 }
 
 main()
