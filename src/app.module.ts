@@ -17,6 +17,7 @@ import { ExperienceLedgerModule } from "./modules/experience-ledger/experience-l
 import { GameProfileModule } from "./modules/game-profile/game-profile.module";
 import { MasteryModule } from "./modules/mastery/mastery.module";
 import { StudentMissionsModule } from "./modules/student-missions/student-missions.module";
+import { StudentAccountModule } from "./modules/student-account/student-account.module";
 import { WorldsModule } from "./modules/worlds/worlds.module";
 
 @Module({
@@ -42,6 +43,7 @@ import { WorldsModule } from "./modules/worlds/worlds.module";
     MasteryModule,
     AiOrchestratorModule,
     StudentMissionsModule,
+    StudentAccountModule,
   ],
 })
 export class AppModule {}

@@ -10,6 +10,7 @@ import { ResponseMessage } from "../../common/decorators/response-message.decora
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { AuthService } from "./auth.service";
+import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
 import { StudentLoginDto } from "./dto/student-login.dto";
 
@@ -32,6 +33,14 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: "Kode peserta tidak valid." })
   studentLogin(@Body() dto: StudentLoginDto) {
     return this.authService.studentLogin(dto);
+  }
+
+  @Post("google")
+  @ResponseMessage("Login dengan Google berhasil.")
+  @ApiOkResponse({ description: "Login/registrasi siswa lewat Google berhasil." })
+  @ApiUnauthorizedResponse({ description: "Token Google tidak valid." })
+  loginWithGoogle(@Body() dto: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(dto);
   }
 
   @Get("me")

@@ -3,8 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService, JwtSignOptions } from "@nestjs/jwt";
 import { UserRole, UserStatus } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { OAuth2Client } from "google-auth-library";
 import { PrismaService } from "../../database/prisma/prisma.service";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
+import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
 import { StudentLoginDto } from "./dto/student-login.dto";
 import { AuthTokenPayload } from "./types/auth-token-payload.type";
@@ -15,6 +17,7 @@ type AuthResponse = {
     id: string;
     name: string;
     email?: string;
+    avatarUrl?: string;
     role: UserRole;
     schoolId?: string;
     teacherProfileId?: string;
@@ -114,15 +117,126 @@ export class AuthService {
       accessToken: await this.signAccessToken({
         sub: user.id,
         role: UserRole.STUDENT,
-        schoolId: student.schoolId,
+        schoolId: student.schoolId ?? undefined,
         studentProfileId: student.id,
       }),
       user: {
         id: user.id,
         name: student.fullName,
         role: UserRole.STUDENT,
-        schoolId: student.schoolId,
+        schoolId: student.schoolId ?? undefined,
         studentProfileId: student.id,
+      },
+    };
+  }
+
+  /**
+   * Registrasi/login siswa umum lewat Google Sign-In. Sekolah TIDAK
+   * diwajibkan di sini - StudentProfile dibuat tanpa schoolId/participantCode
+   * dan siswa bisa menghubungkannya belakangan lewat modul student-account.
+   */
+  async loginWithGoogle(
+    dto: GoogleLoginDto,
+  ): Promise<AuthResponse & { isNewUser: boolean }> {
+    const googleClientId = this.configService.get<string>("GOOGLE_CLIENT_ID");
+    const client = new OAuth2Client(googleClientId);
+
+    let payload: {
+      sub: string;
+      email?: string;
+      name?: string;
+      picture?: string;
+      email_verified?: boolean;
+    };
+
+    try {
+      const ticket = await client.verifyIdToken({
+        idToken: dto.idToken,
+        audience: googleClientId,
+      });
+      const ticketPayload = ticket.getPayload();
+      if (!ticketPayload) {
+        throw new Error("Payload token Google kosong.");
+      }
+      payload = ticketPayload;
+    } catch {
+      throw new UnauthorizedException("Token Google tidak valid.");
+    }
+
+    if (!payload.email || payload.email_verified === false) {
+      throw new UnauthorizedException("Email Google belum terverifikasi.");
+    }
+
+    let user = await this.prisma.user.findFirst({
+      where: { googleId: payload.sub },
+      include: { studentProfile: true },
+    });
+    let isNewUser = false;
+
+    if (!user) {
+      const existingByEmail = await this.prisma.user.findFirst({
+        where: { email: payload.email },
+        include: { studentProfile: true },
+      });
+
+      if (existingByEmail) {
+        user = await this.prisma.user.update({
+          where: { id: existingByEmail.id },
+          data: { googleId: payload.sub, avatarUrl: payload.picture },
+          include: { studentProfile: true },
+        });
+      } else {
+        isNewUser = true;
+        user = await this.prisma.$transaction(async (tx) => {
+          const createdUser = await tx.user.create({
+            data: {
+              name: payload.name ?? payload.email!.split("@")[0],
+              email: payload.email,
+              googleId: payload.sub,
+              avatarUrl: payload.picture,
+              role: UserRole.STUDENT,
+              status: UserStatus.ACTIVE,
+            },
+          });
+
+          await tx.studentProfile.create({
+            data: {
+              userId: createdUser.id,
+              fullName: createdUser.name,
+            },
+          });
+
+          return tx.user.findUniqueOrThrow({
+            where: { id: createdUser.id },
+            include: { studentProfile: true },
+          });
+        });
+      }
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    const studentProfile = user.studentProfile;
+
+    return {
+      isNewUser,
+      accessToken: await this.signAccessToken({
+        sub: user.id,
+        role: user.role,
+        schoolId: studentProfile?.schoolId ?? undefined,
+        studentProfileId: studentProfile?.id,
+      }),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email ?? undefined,
+        avatarUrl: user.avatarUrl ?? undefined,
+        role: user.role,
+        schoolId: studentProfile?.schoolId ?? undefined,
+        studentProfileId: studentProfile?.id,
       },
     };
   }
@@ -137,6 +251,7 @@ export class AuthService {
         name: true,
         email: true,
         phone: true,
+        avatarUrl: true,
         role: true,
         status: true,
         teacherProfile: {
@@ -153,6 +268,10 @@ export class AuthService {
             participantCode: true,
             fullName: true,
             academicYear: true,
+            gradeLevel: true,
+            school: {
+              select: { id: true, name: true, city: true },
+            },
           },
         },
       },
