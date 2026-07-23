@@ -10,3 +10,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 server.log
 server.err.log
+
+# Dokumentasi lokal untuk AI - sengaja tidak di-push ke GitHub
+CLAUDE.md
+docs/
