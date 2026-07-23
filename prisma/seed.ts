@@ -360,31 +360,43 @@ async function main() {
     },
   });
 
-  await prisma.schoolLead.create({
-    data: {
-      schoolName: "SMP Tunas Ilmu",
-      contactName: "Pak Ahmad",
-      position: "Wakil Kurikulum",
-      phone: "628111111111",
-      email: "pilot@example.sch.id",
-      studentCount: 280,
-      message: "Ingin mencoba pilot kelas VII.",
-      source: "seed",
-    },
+  // create() biasa (bukan upsert) - dijaga findFirst supaya seed tetap aman
+  // dijalankan berkali-kali (mis. tiap kali container production restart).
+  const existingLead = await prisma.schoolLead.findFirst({
+    where: { email: "pilot@example.sch.id" },
   });
-
-  await prisma.auditLog.create({
-    data: {
-      userId: admin.id,
-      action: "SEED_DATABASE",
-      entity: "Database",
-      newData: {
-        school: school.slug,
-        classroom: classroom.name,
-        students: 30,
+  if (!existingLead) {
+    await prisma.schoolLead.create({
+      data: {
+        schoolName: "SMP Tunas Ilmu",
+        contactName: "Pak Ahmad",
+        position: "Wakil Kurikulum",
+        phone: "628111111111",
+        email: "pilot@example.sch.id",
+        studentCount: 280,
+        message: "Ingin mencoba pilot kelas VII.",
+        source: "seed",
       },
-    },
+    });
+  }
+
+  const existingSeedLog = await prisma.auditLog.findFirst({
+    where: { action: "SEED_DATABASE", entity: "Database" },
   });
+  if (!existingSeedLog) {
+    await prisma.auditLog.create({
+      data: {
+        userId: admin.id,
+        action: "SEED_DATABASE",
+        entity: "Database",
+        newData: {
+          school: school.slug,
+          classroom: classroom.name,
+          students: 30,
+        },
+      },
+    });
+  }
 
   await seedBaleVerse(subject.id);
   await seedBaleDetective();
