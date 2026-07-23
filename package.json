@@ -10,7 +10,7 @@
     "test": "jest --passWithNoTests",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "node prisma/seed-runner.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.5",
