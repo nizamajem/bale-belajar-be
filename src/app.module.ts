@@ -18,6 +18,7 @@ import { GameProfileModule } from "./modules/game-profile/game-profile.module";
 import { MasteryModule } from "./modules/mastery/mastery.module";
 import { StudentMissionsModule } from "./modules/student-missions/student-missions.module";
 import { StudentAccountModule } from "./modules/student-account/student-account.module";
+import { StudentCasesModule } from "./modules/student-cases/student-cases.module";
 import { WorldsModule } from "./modules/worlds/worlds.module";
 
 @Module({
@@ -44,6 +45,7 @@ import { WorldsModule } from "./modules/worlds/worlds.module";
     AiOrchestratorModule,
     StudentMissionsModule,
     StudentAccountModule,
+    StudentCasesModule,
   ],
 })
 export class AppModule {}

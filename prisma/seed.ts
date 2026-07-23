@@ -1,5 +1,7 @@
 import {
   ActivityType,
+  EvidenceRelevance,
+  EvidenceStrength,
   MissionStatus,
   PrismaClient,
   QuestionDifficulty,
@@ -370,6 +372,7 @@ async function main() {
   });
 
   await seedBaleVerse(subject.id);
+  await seedBaleDetective();
 }
 
 async function seedBaleVerse(mtkSubjectId: string) {
@@ -518,6 +521,178 @@ async function seedBaleVerse(mtkSubjectId: string) {
         },
       });
     }
+  }
+}
+
+async function seedBaleDetective() {
+  const subject = await prisma.subject.upsert({
+    where: { code: "DETEKTIF" },
+    update: {},
+    create: {
+      code: "DETEKTIF",
+      name: "Deteksi & Logika",
+      description:
+        "Observasi, penalaran, memori, kronologi, evaluasi sumber, dan komunikasi lewat investigasi kasus fiktif.",
+    },
+  });
+
+  const skillInputs = [
+    ["DET-OBSERVASI", "Observasi", "Menemukan dan mendeskripsikan detail secara teliti"],
+    ["DET-PENALARAN", "Penalaran Logis", "Menarik kesimpulan berdasarkan bukti, bukan prasangka"],
+    ["DET-MEMORI", "Memori Kerja", "Mengingat dan mengolah informasi secara akurat"],
+    ["DET-KRONOLOGI", "Analisis Kronologi", "Menyusun urutan kejadian dan menemukan ketidaksesuaian waktu"],
+    ["DET-SUMBER", "Evaluasi Sumber", "Membedakan sumber informasi yang kuat dan lemah"],
+    ["DET-ETIKA", "Komunikasi dan Etika", "Bertanya secara netral dan mengambil keputusan bertanggung jawab"],
+  ] as const;
+
+  const skills: Record<string, Awaited<ReturnType<typeof prisma.competency.upsert>>> = {};
+  for (const [index, [code, name, description]] of skillInputs.entries()) {
+    skills[code] = await prisma.competency.upsert({
+      where: { subjectId_code: { subjectId: subject.id, code } },
+      update: {},
+      create: {
+        subjectId: subject.id,
+        code,
+        name,
+        description,
+        orderNumber: index + 1,
+      },
+    });
+  }
+
+  const world = await prisma.world.upsert({
+    where: { key: "detectivia" },
+    update: {},
+    create: {
+      subjectId: subject.id,
+      key: "detectivia",
+      name: "Detectivia",
+      characterClass: "Bale Sleuth",
+      themeDescription:
+        "Dunia investigasi: Kamp Observasi, Lorong Ingatan, Jembatan Logika, Kota Kronologi, Ruang Wawancara, Perpustakaan Sumber.",
+      orderNumber: 2,
+    },
+  });
+
+  const caseMission = await prisma.caseMission.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000002" },
+    update: {},
+    create: {
+      id: "00000000-0000-0000-0000-000000000002",
+      worldId: world.id,
+      title: "Misteri Dokumen Presentasi",
+      openingStory:
+        "Setelah kegiatan sekolah, file presentasi tim tidak ditemukan di komputer bersama. Empat orang menggunakan ruangan pada waktu berbeda. Kamu ditugaskan menyelidiki apa yang sebenarnya terjadi - tanpa langsung menuduh siapa pun.",
+      estimatedMinutes: 20,
+      status: MissionStatus.ACTIVE,
+    },
+  });
+
+  const evidenceInputs = [
+    {
+      type: "DOCUMENT",
+      content: "Jadwal penggunaan ruangan: Ani 13.00-13.30, Budi 13.30-14.15, Citra 14.15-15.00, Dedi 15.00-15.45.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+    {
+      type: "LOG",
+      content: "Catatan login komputer bersama: Ani login 13.05, Budi login 13.32, Citra login 14.20, Dedi login 15.02.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+    {
+      type: "STATEMENT",
+      content: "Pernyataan keempat anggota: semua mengaku sempat membuka file presentasi untuk menambahkan bagian masing-masing.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+    {
+      type: "LOG",
+      content: "Riwayat perubahan file menunjukkan file terakhir disimpan pukul 15.20, lalu tidak ditemukan lagi pukul 15.45.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+    {
+      type: "PHOTO_DESC",
+      content: "Foto ruangan menunjukkan susunan meja sedikit berubah dari foto pagi hari, kursi Dedi tergeser ke arah pintu.",
+      relevance: EvidenceRelevance.PARTIAL,
+      sourceStrength: EvidenceStrength.LOW,
+    },
+    {
+      type: "MESSAGE",
+      content: "Pesan grup simulasi: Citra sempat menulis 'file-nya aneh, aku save ulang ya' sekitar pukul 14.30.",
+      relevance: EvidenceRelevance.PARTIAL,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+  ];
+
+  for (const [index, evidence] of evidenceInputs.entries()) {
+    await prisma.caseEvidence.upsert({
+      where: {
+        caseMissionId_orderNumber: {
+          caseMissionId: caseMission.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: {},
+      create: {
+        caseMissionId: caseMission.id,
+        orderNumber: index + 1,
+        ...evidence,
+      },
+    });
+  }
+
+  const questionInputs = [
+    {
+      skill: "DET-SUMBER",
+      prompt: "Fakta apa yang sudah dapat diverifikasi dari bukti-bukti di atas?",
+      expectedKeywords: ["jadwal", "login", "waktu", "perubahan", "15.20", "catatan"],
+      expectedReasoning:
+        "Fakta yang terverifikasi adalah yang didukung lebih dari satu sumber independen - misalnya jadwal penggunaan ruangan dan catatan login yang sama-sama menunjukkan urutan pemakaian, serta riwayat perubahan file pukul 15.20.",
+    },
+    {
+      skill: "DET-PENALARAN",
+      prompt: "Buat minimal dua hipotesis berbeda tentang apa yang terjadi pada file tersebut.",
+      expectedKeywords: ["terhapus", "dipindahkan", "sengaja", "tidak sengaja", "folder", "tersimpan"],
+      expectedReasoning:
+        "Hipotesis yang masuk akal misalnya: (1) file dipindahkan atau tersimpan ke folder lain tanpa sengaja saat Citra menyimpan ulang, (2) file terhapus tidak sengaja setelah pukul 15.20.",
+    },
+    {
+      skill: "DET-KRONOLOGI",
+      prompt: "Susun kronologi penggunaan ruangan berdasarkan bukti yang ada. Adakah bagian yang tidak masuk akal?",
+      expectedKeywords: ["urutan", "sebelum", "sesudah", "tumpang tindih", "jadwal", "login"],
+      expectedReasoning:
+        "Kronologi disusun dari jadwal dan catatan login. Periksa apakah waktu login setiap orang konsisten dengan jadwal ruangan, atau ada tumpang tindih yang perlu diklarifikasi.",
+    },
+    {
+      skill: "DET-ETIKA",
+      prompt: "Apakah bukti yang ada sudah cukup untuk menuduh salah satu dari empat orang tersebut? Jelaskan alasanmu.",
+      expectedKeywords: ["belum cukup", "tidak boleh menuduh", "informasi tambahan", "tidak adil", "praduga"],
+      expectedReasoning:
+        "Belum cukup bukti untuk menuduh siapa pun secara spesifik. Menuduh tanpa bukti kuat dapat merugikan orang yang tidak bersalah - sikap etis detektif adalah menahan kesimpulan sampai bukti benar-benar cukup.",
+    },
+  ] as const;
+
+  for (const [index, question] of questionInputs.entries()) {
+    await prisma.caseQuestion.upsert({
+      where: {
+        caseMissionId_orderNumber: {
+          caseMissionId: caseMission.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: {},
+      create: {
+        caseMissionId: caseMission.id,
+        competencyId: skills[question.skill].id,
+        orderNumber: index + 1,
+        prompt: question.prompt,
+        expectedKeywords: [...question.expectedKeywords],
+        expectedReasoning: question.expectedReasoning,
+      },
+    });
   }
 }
 

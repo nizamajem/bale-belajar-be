@@ -138,6 +138,25 @@ enum CareerPath {
   KOREAN_TEACHER
 }
 
+enum EvidenceRelevance {
+  RELEVANT
+  PARTIAL
+  DISTRACTOR
+}
+
+enum EvidenceStrength {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ConfidenceDeclaration {
+  HIGH
+  MEDIUM
+  LOW
+  INSUFFICIENT_EVIDENCE
+}
+
 model User {
   id               String    @id @default(uuid()) @db.Uuid
   name             String
@@ -241,6 +260,7 @@ model StudentProfile {
   masteryEvents MasteryEvent[]
   missionAssignments DailyMissionAssignment[]
   aiInteractionLogs AiInteractionLog[]
+  caseAssignments CaseAssignment[]
 
   @@index([schoolId])
   @@index([academicYear])
@@ -318,6 +338,7 @@ model Competency {
   missions      Mission[]
   masteryStates MasteryState[]
   masteryEvents MasteryEvent[]
+  caseQuestions CaseQuestion[]
 
   @@unique([subjectId, code])
   @@index([subjectId])
@@ -641,6 +662,8 @@ model World {
   experienceEntries   ExperienceLedgerEntry[]
   missions            Mission[]
   missionAssignments  DailyMissionAssignment[]
+  caseMissions        CaseMission[]
+  caseAssignments     CaseAssignment[]
 
   @@index([subjectId])
 }
@@ -860,4 +883,120 @@ model AiInteractionLog {
 
   @@index([studentProfileId])
   @@index([feature])
+}
+
+// =========================================================================
+// BaleDetective: Case Mission (evidence-based investigation missions).
+// Bentuknya beda dari Mission/Activity (pilihan ganda) di Numeria - di sini
+// siswa membaca bukti, menjawab pertanyaan penalaran secara bebas teks, dan
+// menulis kesimpulan + tingkat keyakinan. Skill Mastery & XP tetap pakai
+// Competency/MasteryState/ExperienceLedgerEntry yang sudah ada (reuse penuh).
+// =========================================================================
+
+model CaseMission {
+  id               String        @id @default(uuid()) @db.Uuid
+  worldId          String        @db.Uuid
+  title            String
+  openingStory     String
+  estimatedMinutes Int           @default(20)
+  status           MissionStatus @default(DRAFT)
+  createdBy        String?       @db.Uuid
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  world       World            @relation(fields: [worldId], references: [id])
+  evidence    CaseEvidence[]
+  questions   CaseQuestion[]
+  assignments CaseAssignment[]
+
+  @@index([worldId])
+  @@index([status])
+}
+
+model CaseEvidence {
+  id             String            @id @default(uuid()) @db.Uuid
+  caseMissionId  String            @db.Uuid
+  orderNumber    Int
+  type           String
+  content        String
+  relevance      EvidenceRelevance
+  sourceStrength EvidenceStrength
+  createdAt      DateTime          @default(now())
+
+  caseMission CaseMission @relation(fields: [caseMissionId], references: [id])
+
+  @@unique([caseMissionId, orderNumber])
+}
+
+model CaseQuestion {
+  id                String   @id @default(uuid()) @db.Uuid
+  caseMissionId     String   @db.Uuid
+  competencyId      String   @db.Uuid
+  orderNumber       Int
+  prompt            String
+  expectedKeywords  String[]
+  expectedReasoning String
+  createdAt         DateTime @default(now())
+
+  caseMission CaseMission  @relation(fields: [caseMissionId], references: [id])
+  competency  Competency   @relation(fields: [competencyId], references: [id])
+  answers     CaseAnswer[]
+
+  @@unique([caseMissionId, orderNumber])
+  @@index([competencyId])
+}
+
+model CaseAssignment {
+  id               String           @id @default(uuid()) @db.Uuid
+  studentProfileId String           @db.Uuid
+  worldId          String           @db.Uuid
+  caseMissionId    String           @db.Uuid
+  assignedDate     DateTime         @db.Date
+  status           AssignmentStatus @default(ASSIGNED)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  student     StudentProfile @relation(fields: [studentProfileId], references: [id])
+  world       World          @relation(fields: [worldId], references: [id])
+  caseMission CaseMission    @relation(fields: [caseMissionId], references: [id])
+  attempt     CaseAttempt?
+
+  @@unique([studentProfileId, worldId, assignedDate])
+  @@index([caseMissionId])
+}
+
+model CaseAttempt {
+  id               String                 @id @default(uuid()) @db.Uuid
+  caseAssignmentId String                 @unique @db.Uuid
+  status           AttemptStatus          @default(IN_PROGRESS)
+  startedAt        DateTime               @default(now())
+  submittedAt      DateTime?
+  conclusionText   String?
+  confidenceLevel  ConfidenceDeclaration?
+  overallScore     Decimal?               @db.Decimal(5, 2)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  assignment CaseAssignment @relation(fields: [caseAssignmentId], references: [id])
+  answers    CaseAnswer[]
+
+  @@index([status])
+}
+
+model CaseAnswer {
+  id              String    @id @default(uuid()) @db.Uuid
+  caseAttemptId   String    @db.Uuid
+  caseQuestionId  String    @db.Uuid
+  answerText      String?
+  score           Decimal?  @db.Decimal(5, 2)
+  matchedKeywords String[]
+  answeredAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  attempt  CaseAttempt  @relation(fields: [caseAttemptId], references: [id])
+  question CaseQuestion @relation(fields: [caseQuestionId], references: [id])
+
+  @@unique([caseAttemptId, caseQuestionId])
+  @@index([caseQuestionId])
 }
