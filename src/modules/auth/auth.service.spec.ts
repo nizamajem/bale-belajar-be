@@ -1,7 +1,8 @@
-import { UnauthorizedException } from "@nestjs/common";
+import { ConflictException, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { UserRole, UserStatus } from "@prisma/client";
+import * as bcrypt from "bcrypt";
 import { PrismaService } from "../../database/prisma/prisma.service";
 import { AuthService } from "./auth.service";
 
@@ -34,10 +35,12 @@ type FakeUser = {
   id: string;
   name: string;
   email: string | null;
+  passwordHash: string | null;
   firebaseUid: string | null;
   avatarUrl: string | null;
   role: UserRole;
   status: UserStatus;
+  teacherProfile: { id: string; schoolId: string } | null;
   studentProfile: { id: string; schoolId: string | null } | null;
 };
 
@@ -56,8 +59,9 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
     ) ?? null;
 
   const userDelegate = {
-    findFirst: jest.fn((args: { where: { firebaseUid?: string; email?: string } }) =>
-      Promise.resolve(findUser(args.where)),
+    findFirst: jest.fn(
+      (args: { where: { firebaseUid?: string; email?: string; deletedAt?: null; status?: UserStatus } }) =>
+        Promise.resolve(findUser(args.where)),
     ),
     findUniqueOrThrow: jest.fn((args: { where: { id: string } }) => {
       const user = findUser({ id: args.where.id });
@@ -76,10 +80,12 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
         id,
         name: args.data.name ?? "",
         email: args.data.email ?? null,
+        passwordHash: args.data.passwordHash ?? null,
         firebaseUid: args.data.firebaseUid ?? null,
         avatarUrl: args.data.avatarUrl ?? null,
         role: args.data.role ?? UserRole.STUDENT,
         status: args.data.status ?? UserStatus.ACTIVE,
+        teacherProfile: null,
         studentProfile: null,
       };
       users.set(id, created);
@@ -88,12 +94,14 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
   };
 
   const studentProfileDelegate = {
-    create: jest.fn((args: { data: { userId: string; fullName: string } }) => {
-      const user = findUser({ id: args.data.userId });
-      const profile = { id: `sp-${args.data.userId}`, schoolId: null };
-      if (user) user.studentProfile = profile;
-      return Promise.resolve(profile);
-    }),
+    create: jest.fn(
+      (args: { data: { userId: string; fullName: string; gradeLevel?: number } }) => {
+        const user = findUser({ id: args.data.userId });
+        const profile = { id: `sp-${args.data.userId}`, schoolId: null };
+        if (user) user.studentProfile = profile;
+        return Promise.resolve(profile);
+      },
+    ),
   };
 
   const prisma = {
@@ -140,10 +148,12 @@ describe("AuthService.loginWithGoogle", () => {
       id: "user-existing",
       name: "Siswa Lama",
       email: "siswa@example.com",
+      passwordHash: null,
       firebaseUid: "firebase-uid-1",
       avatarUrl: null,
       role: UserRole.STUDENT,
       status: UserStatus.ACTIVE,
+      teacherProfile: null,
       studentProfile: { id: "sp-existing", schoolId: "school-1" },
     };
     const { prisma } = createFakePrisma({ existingUsers: [existing] });
@@ -162,10 +172,12 @@ describe("AuthService.loginWithGoogle", () => {
       id: "user-email-match",
       name: "Siswa Email",
       email: "siswa@example.com",
+      passwordHash: null,
       firebaseUid: null,
       avatarUrl: null,
       role: UserRole.STUDENT,
       status: UserStatus.ACTIVE,
+      teacherProfile: null,
       studentProfile: { id: "sp-email-match", schoolId: null },
     };
     const { prisma, users } = createFakePrisma({ existingUsers: [existing] });
@@ -195,5 +207,101 @@ describe("AuthService.loginWithGoogle", () => {
     await expect(service.loginWithGoogle({ idToken: "bad-token" })).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+});
+
+describe("AuthService.registerStudent", () => {
+  it("creates a STUDENT user + StudentProfile with a hashed password", async () => {
+    const { prisma, users } = createFakePrisma();
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    const result = await service.registerStudent({
+      name: "Dimas Aditya",
+      email: "Dimas@Example.com",
+      password: "SandiKuat123!",
+      gradeLevel: 10,
+    });
+
+    expect(result.user.role).toBe(UserRole.STUDENT);
+    expect(result.user.studentProfileId).toBeDefined();
+    const created = [...users.values()][0];
+    expect(created.email).toBe("dimas@example.com");
+    expect(created.passwordHash).not.toBe("SandiKuat123!");
+    expect(await bcrypt.compare("SandiKuat123!", created.passwordHash!)).toBe(true);
+  });
+
+  it("rejects registration when the email is already used", async () => {
+    const existing: FakeUser = {
+      id: "user-existing",
+      name: "Sudah Ada",
+      email: "dimas@example.com",
+      passwordHash: "hash",
+      firebaseUid: null,
+      avatarUrl: null,
+      role: UserRole.STUDENT,
+      status: UserStatus.ACTIVE,
+      teacherProfile: null,
+      studentProfile: null,
+    };
+    const { prisma } = createFakePrisma({ existingUsers: [existing] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    await expect(
+      service.registerStudent({
+        name: "Dimas Aditya",
+        email: "dimas@example.com",
+        password: "SandiKuat123!",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe("AuthService.login", () => {
+  it("includes studentProfileId in the token/response for a student account", async () => {
+    const passwordHash = await bcrypt.hash("SandiKuat123!", 4);
+    const existing: FakeUser = {
+      id: "user-student",
+      name: "Siswa Email",
+      email: "siswa@example.com",
+      passwordHash,
+      firebaseUid: null,
+      avatarUrl: null,
+      role: UserRole.STUDENT,
+      status: UserStatus.ACTIVE,
+      teacherProfile: null,
+      studentProfile: { id: "sp-1", schoolId: "school-1" },
+    };
+    const { prisma } = createFakePrisma({ existingUsers: [existing] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    const result = await service.login({
+      email: "siswa@example.com",
+      password: "SandiKuat123!",
+    });
+
+    expect(result.user.studentProfileId).toBe("sp-1");
+    expect(result.user.schoolId).toBe("school-1");
+  });
+
+  it("rejects an incorrect password", async () => {
+    const passwordHash = await bcrypt.hash("SandiKuat123!", 4);
+    const existing: FakeUser = {
+      id: "user-student",
+      name: "Siswa Email",
+      email: "siswa@example.com",
+      passwordHash,
+      firebaseUid: null,
+      avatarUrl: null,
+      role: UserRole.STUDENT,
+      status: UserStatus.ACTIVE,
+      teacherProfile: null,
+      studentProfile: null,
+    };
+    const { prisma } = createFakePrisma({ existingUsers: [existing] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    await expect(
+      service.login({ email: "siswa@example.com", password: "salah" }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

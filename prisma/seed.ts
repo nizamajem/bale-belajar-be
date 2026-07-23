@@ -66,6 +66,28 @@ async function main() {
     },
   });
 
+  const demoStudentPasswordHash = await bcrypt.hash("Siswa123!", 12);
+  const demoStudentUser = await prisma.user.upsert({
+    where: { email: "siswa@balebelajar.id" },
+    update: {},
+    create: {
+      name: "Siswa Demo Email",
+      email: "siswa@balebelajar.id",
+      passwordHash: demoStudentPasswordHash,
+      role: UserRole.STUDENT,
+    },
+  });
+
+  await prisma.studentProfile.upsert({
+    where: { userId: demoStudentUser.id },
+    update: {},
+    create: {
+      userId: demoStudentUser.id,
+      fullName: demoStudentUser.name,
+      gradeLevel: 10,
+    },
+  });
+
   const classroom = await prisma.classroom.upsert({
     where: {
       schoolId_name_academicYear: {

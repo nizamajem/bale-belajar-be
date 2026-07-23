@@ -12,6 +12,7 @@ import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { AuthService } from "./auth.service";
 import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
+import { RegisterStudentDto } from "./dto/register-student.dto";
 import { StudentLoginDto } from "./dto/student-login.dto";
 
 @ApiTags("Auth")
@@ -33,6 +34,13 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: "Kode peserta tidak valid." })
   studentLogin(@Body() dto: StudentLoginDto) {
     return this.authService.studentLogin(dto);
+  }
+
+  @Post("register")
+  @ResponseMessage("Registrasi berhasil.")
+  @ApiOkResponse({ description: "Registrasi siswa dengan email+password berhasil." })
+  registerStudent(@Body() dto: RegisterStudentDto) {
+    return this.authService.registerStudent(dto);
   }
 
   @Post("google")

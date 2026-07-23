@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService, JwtSignOptions } from "@nestjs/jwt";
 import { UserRole, UserStatus } from "@prisma/client";
@@ -7,9 +11,12 @@ import { PrismaService } from "../../database/prisma/prisma.service";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
+import { RegisterStudentDto } from "./dto/register-student.dto";
 import { StudentLoginDto } from "./dto/student-login.dto";
 import { AuthTokenPayload } from "./types/auth-token-payload.type";
 import { getFirebaseAuth } from "./firebase-admin.util";
+
+const PASSWORD_HASH_ROUNDS = 12;
 
 type AuthResponse = {
   accessToken: string;
@@ -42,6 +49,7 @@ export class AuthService {
       },
       include: {
         teacherProfile: true,
+        studentProfile: true,
       },
     });
 
@@ -54,8 +62,9 @@ export class AuthService {
       throw new UnauthorizedException("Email atau password tidak valid.");
     }
 
-    const schoolId = user.teacherProfile?.schoolId;
+    const schoolId = user.teacherProfile?.schoolId ?? user.studentProfile?.schoolId ?? undefined;
     const teacherProfileId = user.teacherProfile?.id;
+    const studentProfileId = user.studentProfile?.id;
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -68,6 +77,7 @@ export class AuthService {
         role: user.role,
         schoolId,
         teacherProfileId,
+        studentProfileId,
       }),
       user: {
         id: user.id,
@@ -76,6 +86,64 @@ export class AuthService {
         role: user.role,
         schoolId,
         teacherProfileId,
+        studentProfileId,
+      },
+    };
+  }
+
+  /**
+   * Registrasi mandiri siswa dengan email+password (tanpa kode peserta,
+   * tanpa sekolah). Sekolah bisa dihubungkan belakangan lewat modul
+   * student-account, sama seperti alur Google.
+   */
+  async registerStudent(dto: RegisterStudentDto): Promise<AuthResponse> {
+    const existing = await this.prisma.user.findFirst({
+      where: { email: dto.email.trim().toLowerCase() },
+    });
+
+    if (existing) {
+      throw new ConflictException("Email sudah terdaftar. Silakan masuk.");
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, PASSWORD_HASH_ROUNDS);
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          name: dto.name.trim(),
+          email: dto.email.trim().toLowerCase(),
+          passwordHash,
+          role: UserRole.STUDENT,
+          status: UserStatus.ACTIVE,
+        },
+      });
+
+      await tx.studentProfile.create({
+        data: {
+          userId: createdUser.id,
+          fullName: createdUser.name,
+          gradeLevel: dto.gradeLevel,
+        },
+      });
+
+      return tx.user.findUniqueOrThrow({
+        where: { id: createdUser.id },
+        include: { studentProfile: true },
+      });
+    });
+
+    return {
+      accessToken: await this.signAccessToken({
+        sub: user.id,
+        role: UserRole.STUDENT,
+        studentProfileId: user.studentProfile?.id,
+      }),
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email ?? undefined,
+        role: UserRole.STUDENT,
+        studentProfileId: user.studentProfile?.id,
       },
     };
   }
