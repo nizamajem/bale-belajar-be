@@ -166,6 +166,10 @@ model User {
   firebaseUid      String?   @unique
   avatarUrl        String?
   role             UserRole
+  // Peran tambahan yang boleh dipakai user ini lewat pindah peran (mis.
+  // siswa yang juga guru). `role` di atas tetap peran utama/default saat
+  // login pertama kali; ini murni daftar peran ekstra yang tersedia.
+  additionalRoles  UserRole[] @default([])
   status           UserStatus @default(ACTIVE)
   refreshTokenHash String?
   lastLoginAt      DateTime?

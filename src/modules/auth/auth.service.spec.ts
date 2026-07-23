@@ -1,4 +1,9 @@
-import { ConflictException, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { UserRole, UserStatus } from "@prisma/client";
@@ -39,6 +44,7 @@ type FakeUser = {
   firebaseUid: string | null;
   avatarUrl: string | null;
   role: UserRole;
+  additionalRoles: UserRole[];
   status: UserStatus;
   teacherProfile: { id: string; schoolId: string } | null;
   studentProfile: { id: string; schoolId: string | null } | null;
@@ -63,17 +69,33 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
       (args: { where: { firebaseUid?: string; email?: string; deletedAt?: null; status?: UserStatus } }) =>
         Promise.resolve(findUser(args.where)),
     ),
+    findUnique: jest.fn((args: { where: { id: string } }) =>
+      Promise.resolve(findUser({ id: args.where.id })),
+    ),
     findUniqueOrThrow: jest.fn((args: { where: { id: string } }) => {
       const user = findUser({ id: args.where.id });
       if (!user) throw new Error("not found");
       return Promise.resolve(user);
     }),
-    update: jest.fn((args: { where: { id: string }; data: Partial<FakeUser> }) => {
-      const user = findUser({ id: args.where.id });
-      if (!user) throw new Error("not found");
-      Object.assign(user, args.data);
-      return Promise.resolve(user);
-    }),
+    update: jest.fn(
+      (args: {
+        where: { id: string };
+        data: Partial<Omit<FakeUser, "additionalRoles">> & {
+          additionalRoles?: UserRole[] | { push: UserRole };
+        };
+      }) => {
+        const user = findUser({ id: args.where.id });
+        if (!user) throw new Error("not found");
+        const { additionalRoles, ...rest } = args.data;
+        Object.assign(user, rest);
+        if (additionalRoles !== undefined) {
+          user.additionalRoles = Array.isArray(additionalRoles)
+            ? additionalRoles
+            : [...user.additionalRoles, additionalRoles.push];
+        }
+        return Promise.resolve(user);
+      },
+    ),
     create: jest.fn((args: { data: Partial<FakeUser> }) => {
       const id = `user-${nextId++}`;
       const created: FakeUser = {
@@ -84,6 +106,7 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
         firebaseUid: args.data.firebaseUid ?? null,
         avatarUrl: args.data.avatarUrl ?? null,
         role: args.data.role ?? UserRole.STUDENT,
+        additionalRoles: args.data.additionalRoles ?? [],
         status: args.data.status ?? UserStatus.ACTIVE,
         teacherProfile: null,
         studentProfile: null,
@@ -95,20 +118,34 @@ function createFakePrisma(options: { existingUsers?: FakeUser[] } = {}) {
 
   const studentProfileDelegate = {
     create: jest.fn(
-      (args: { data: { userId: string; fullName: string; gradeLevel?: number } }) => {
+      (args: { data: { userId: string; fullName: string; schoolId?: string; gradeLevel?: number } }) => {
         const user = findUser({ id: args.data.userId });
-        const profile = { id: `sp-${args.data.userId}`, schoolId: null };
+        const profile = { id: `sp-${args.data.userId}`, schoolId: args.data.schoolId ?? null };
         if (user) user.studentProfile = profile;
         return Promise.resolve(profile);
       },
     ),
   };
 
+  const teacherProfileDelegate = {
+    create: jest.fn((args: { data: { userId: string; schoolId: string } }) => {
+      const user = findUser({ id: args.data.userId });
+      const profile = { id: `tp-${args.data.userId}`, schoolId: args.data.schoolId };
+      if (user) user.teacherProfile = profile;
+      return Promise.resolve(profile);
+    }),
+  };
+
   const prisma = {
     user: userDelegate,
     studentProfile: studentProfileDelegate,
+    teacherProfile: teacherProfileDelegate,
     $transaction: jest.fn((callback: (tx: unknown) => unknown) =>
-      callback({ user: userDelegate, studentProfile: studentProfileDelegate }),
+      callback({
+        user: userDelegate,
+        studentProfile: studentProfileDelegate,
+        teacherProfile: teacherProfileDelegate,
+      }),
     ),
   } as unknown as PrismaService;
 
@@ -152,6 +189,7 @@ describe("AuthService.loginWithGoogle", () => {
       firebaseUid: "firebase-uid-1",
       avatarUrl: null,
       role: UserRole.STUDENT,
+      additionalRoles: [],
       status: UserStatus.ACTIVE,
       teacherProfile: null,
       studentProfile: { id: "sp-existing", schoolId: "school-1" },
@@ -176,6 +214,7 @@ describe("AuthService.loginWithGoogle", () => {
       firebaseUid: null,
       avatarUrl: null,
       role: UserRole.STUDENT,
+      additionalRoles: [],
       status: UserStatus.ACTIVE,
       teacherProfile: null,
       studentProfile: { id: "sp-email-match", schoolId: null },
@@ -239,6 +278,7 @@ describe("AuthService.registerStudent", () => {
       firebaseUid: null,
       avatarUrl: null,
       role: UserRole.STUDENT,
+      additionalRoles: [],
       status: UserStatus.ACTIVE,
       teacherProfile: null,
       studentProfile: null,
@@ -267,6 +307,7 @@ describe("AuthService.login", () => {
       firebaseUid: null,
       avatarUrl: null,
       role: UserRole.STUDENT,
+      additionalRoles: [],
       status: UserStatus.ACTIVE,
       teacherProfile: null,
       studentProfile: { id: "sp-1", schoolId: "school-1" },
@@ -293,6 +334,7 @@ describe("AuthService.login", () => {
       firebaseUid: null,
       avatarUrl: null,
       role: UserRole.STUDENT,
+      additionalRoles: [],
       status: UserStatus.ACTIVE,
       teacherProfile: null,
       studentProfile: null,
@@ -303,5 +345,105 @@ describe("AuthService.login", () => {
     await expect(
       service.login({ email: "siswa@example.com", password: "salah" }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+function multiRoleUser(overrides: Partial<FakeUser> = {}): FakeUser {
+  return {
+    id: "user-multi",
+    name: "Siswa Guru",
+    email: "siswa-guru@example.com",
+    passwordHash: null,
+    firebaseUid: null,
+    avatarUrl: null,
+    role: UserRole.STUDENT,
+    additionalRoles: [UserRole.TEACHER],
+    status: UserStatus.ACTIVE,
+    teacherProfile: { id: "tp-1", schoolId: "school-1" },
+    studentProfile: { id: "sp-1", schoolId: "school-1" },
+    ...overrides,
+  };
+}
+
+describe("AuthService.switchRole", () => {
+  it("issues a token scoped to the target role when the user holds it", async () => {
+    const { prisma } = createFakePrisma({ existingUsers: [multiRoleUser()] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    const result = await service.switchRole(
+      { id: "user-multi", role: UserRole.STUDENT },
+      { role: UserRole.TEACHER },
+    );
+
+    expect(result.user.role).toBe(UserRole.TEACHER);
+    expect(result.user.teacherProfileId).toBe("tp-1");
+    expect(result.user.studentProfileId).toBeUndefined();
+  });
+
+  it("rejects switching to a role the user does not hold", async () => {
+    const { prisma } = createFakePrisma({
+      existingUsers: [multiRoleUser({ additionalRoles: [] })],
+    });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    await expect(
+      service.switchRole(
+        { id: "user-multi", role: UserRole.STUDENT },
+        { role: UserRole.TEACHER },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe("AuthService.addRole", () => {
+  it("grants TEACHER and creates a TeacherProfile when the student already has a school", async () => {
+    const existing = multiRoleUser({
+      additionalRoles: [],
+      teacherProfile: null,
+      studentProfile: { id: "sp-1", schoolId: "school-1" },
+    });
+    const { prisma, users } = createFakePrisma({ existingUsers: [existing] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    const result = await service.addRole(
+      { id: "user-multi", role: UserRole.STUDENT },
+      { role: UserRole.TEACHER },
+    );
+
+    expect(result.roles).toEqual([UserRole.STUDENT, UserRole.TEACHER]);
+    expect(users.get("user-multi")?.teacherProfile).not.toBeNull();
+    expect(users.get("user-multi")?.additionalRoles).toContain(UserRole.TEACHER);
+  });
+
+  it("rejects adding TEACHER when the account has no school connected", async () => {
+    const existing = multiRoleUser({
+      additionalRoles: [],
+      teacherProfile: null,
+      studentProfile: { id: "sp-1", schoolId: null },
+    });
+    const { prisma } = createFakePrisma({ existingUsers: [existing] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    await expect(
+      service.addRole({ id: "user-multi", role: UserRole.STUDENT }, { role: UserRole.TEACHER }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects adding a role the user already holds", async () => {
+    const { prisma } = createFakePrisma({ existingUsers: [multiRoleUser()] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    await expect(
+      service.addRole({ id: "user-multi", role: UserRole.STUDENT }, { role: UserRole.TEACHER }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("rejects adding an admin-tier role via self-service", async () => {
+    const { prisma } = createFakePrisma({ existingUsers: [multiRoleUser()] });
+    const service = new AuthService(createFakeConfigService(), createFakeJwtService(), prisma);
+
+    await expect(
+      service.addRole({ id: "user-multi", role: UserRole.STUDENT }, { role: UserRole.ADMIN }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

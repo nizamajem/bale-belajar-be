@@ -69,24 +69,39 @@ async function main() {
   });
 
   const demoStudentPasswordHash = await bcrypt.hash("Siswa123!", 12);
+  // Akun demo ini sengaja dibuat multi-role (Siswa + Guru) supaya fitur
+  // pindah peran bisa langsung dicoba tanpa perlu langkah tambahan.
   const demoStudentUser = await prisma.user.upsert({
     where: { email: "siswa@balebelajar.id" },
-    update: {},
+    update: { additionalRoles: [UserRole.TEACHER] },
     create: {
       name: "Siswa Demo Email",
       email: "siswa@balebelajar.id",
       passwordHash: demoStudentPasswordHash,
       role: UserRole.STUDENT,
+      additionalRoles: [UserRole.TEACHER],
     },
   });
 
   await prisma.studentProfile.upsert({
     where: { userId: demoStudentUser.id },
-    update: {},
+    update: { schoolId: school.id },
     create: {
       userId: demoStudentUser.id,
       fullName: demoStudentUser.name,
+      schoolId: school.id,
       gradeLevel: 10,
+    },
+  });
+
+  await prisma.teacherProfile.upsert({
+    where: { userId: demoStudentUser.id },
+    update: {},
+    create: {
+      userId: demoStudentUser.id,
+      schoolId: school.id,
+      employeeNumber: "G-DEMO",
+      subjectSpecialization: "Lintas Mapel",
     },
   });
 

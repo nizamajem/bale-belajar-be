@@ -10,10 +10,12 @@ import { ResponseMessage } from "../../common/decorators/response-message.decora
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { AuthService } from "./auth.service";
+import { AddRoleDto } from "./dto/add-role.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterStudentDto } from "./dto/register-student.dto";
 import { StudentLoginDto } from "./dto/student-login.dto";
+import { SwitchRoleDto } from "./dto/switch-role.dto";
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -57,6 +59,22 @@ export class AuthController {
   @ResponseMessage("Profil user berhasil diambil.")
   getMe(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.authService.getMe(currentUser);
+  }
+
+  @Post("switch-role")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ResponseMessage("Peran berhasil diganti.")
+  switchRole(@CurrentUser() currentUser: AuthenticatedUser, @Body() dto: SwitchRoleDto) {
+    return this.authService.switchRole(currentUser, dto);
+  }
+
+  @Post("roles")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ResponseMessage("Peran baru berhasil ditambahkan.")
+  addRole(@CurrentUser() currentUser: AuthenticatedUser, @Body() dto: AddRoleDto) {
+    return this.authService.addRole(currentUser, dto);
   }
 
   @Post("refresh")
