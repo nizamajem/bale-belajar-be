@@ -330,6 +330,7 @@ export class AuthService {
             fullName: true,
             academicYear: true,
             gradeLevel: true,
+            careerPath: true,
             school: {
               select: { id: true, name: true, city: true },
             },

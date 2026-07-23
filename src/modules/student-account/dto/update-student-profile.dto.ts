@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { CareerPath } from "@prisma/client";
 import {
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -21,4 +23,9 @@ export class UpdateStudentProfileDto {
   @Min(10)
   @Max(12)
   gradeLevel?: number;
+
+  @ApiPropertyOptional({ enum: CareerPath, example: CareerPath.DETECTIVE })
+  @IsOptional()
+  @IsEnum(CareerPath)
+  careerPath?: CareerPath;
 }

@@ -132,6 +132,12 @@ enum GuardrailStatus {
   FALLBACK
 }
 
+enum CareerPath {
+  DETECTIVE
+  ANIMAL_DOCTOR
+  KOREAN_TEACHER
+}
+
 model User {
   id               String    @id @default(uuid()) @db.Uuid
   name             String
@@ -218,6 +224,7 @@ model StudentProfile {
   birthDate       DateTime?
   academicYear    String?
   gradeLevel      Int?
+  careerPath      CareerPath?
   isActive        Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

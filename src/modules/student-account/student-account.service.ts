@@ -69,8 +69,9 @@ export class StudentAccountService {
       data: {
         fullName: dto.fullName,
         gradeLevel: dto.gradeLevel,
+        careerPath: dto.careerPath,
       },
-      select: { id: true, fullName: true, gradeLevel: true },
+      select: { id: true, fullName: true, gradeLevel: true, careerPath: true },
     });
   }
 
