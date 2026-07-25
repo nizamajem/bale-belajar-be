@@ -607,7 +607,7 @@ async function seedBaleDetective() {
     where: { worldId_slug: { worldId: world.id, slug: "observasi-bukti-dasar" } },
     update: {
       competencyId: skills["DET-OBSERVASI"].id,
-      title: "Modul 1: Observasi Bukti Seperti Detektif",
+      title: "Bab 1: Fakta vs Dugaan",
       simpleGoal:
         "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
       bigIdea:
@@ -618,7 +618,7 @@ async function seedBaleDetective() {
       worldId: world.id,
       competencyId: skills["DET-OBSERVASI"].id,
       slug: "observasi-bukti-dasar",
-      title: "Modul 1: Observasi Bukti Seperti Detektif",
+      title: "Bab 1: Fakta vs Dugaan",
       simpleGoal:
         "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
       bigIdea:
@@ -737,8 +737,8 @@ async function seedBaleDetective() {
     },
     {
       type: CurriculumLessonType.MASTERY_PATH,
-      title: "Jalur mastery berikutnya",
-      body: "Setelah observasi bukti, kamu akan naik ke kemampuan detektif yang lebih sulit.",
+      title: "Jalur berikutnya",
+      body: "Setelah membaca bukti dasar, kamu akan naik ke kemampuan detektif yang lebih sulit.",
       examples: [],
       items: [
         "Kronologi kejadian",
@@ -824,6 +824,274 @@ async function seedBaleDetective() {
         ...caseStudy,
       },
     });
+  }
+
+  const extraDetectiveModules = [
+    {
+      slug: "urutan-waktu-alibi",
+      competencyKey: "DET-KRONOLOGI",
+      title: "Bab 2: Urutan Waktu dan Alibi",
+      simpleGoal:
+        "Kamu belajar menyusun jam kejadian agar tahu siapa yang punya kesempatan dan bagian mana yang belum jelas.",
+      bigIdea:
+        "Waktu adalah peta kasus. Detektif tidak hanya bertanya siapa, tetapi juga kapan, sebelum apa, dan sesudah apa.",
+      estimatedMinutes: 30,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Timeline",
+          body: "Timeline adalah daftar kejadian yang disusun dari paling awal sampai paling akhir. Timeline membantu melihat lubang informasi.",
+          examples: ["07.10 pintu terbuka, 07.20 kunci hilang. Berarti fokus cek ada di antara 07.10-07.20."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Alibi",
+          body: "Alibi adalah alasan atau bukti bahwa seseorang berada di tempat lain saat kejadian. Alibi kuat harus bisa dicek.",
+          examples: ["Catatan hadir di perpustakaan lebih kuat daripada 'katanya sedang di perpustakaan'."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CHECKLIST,
+          title: "Checklist timeline",
+          body: "Gunakan daftar ini sebelum menyimpulkan.",
+          examples: [],
+          items: [
+            "Kapan kejadian paling awal yang pasti?",
+            "Kapan kejadian terakhir yang pasti?",
+            "Siapa saja yang berada di rentang waktu itu?",
+            "Apakah alibinya bisa dicek?",
+          ],
+        },
+      ],
+      cases: [
+        {
+          title: "Cerita Kasus: Lencana klub hilang",
+          story:
+            "Lencana klub masih ada pukul 12.05. Pukul 12.30 lencana hilang. Raka bilang ia di kantin pukul 12.10, tetapi catatan pembayaran kantin menunjukkan ia membeli minum pukul 12.32.",
+          analysisSteps: [
+            "Waktu pasti: lencana ada pukul 12.05 dan hilang pukul 12.30.",
+            "Alibi Raka belum cocok karena bukti kantin muncul pukul 12.32.",
+            "Kesimpulan aman: alibi Raka perlu dicek lagi, tetapi belum cukup untuk menuduh.",
+          ],
+          commonMistake: "Langsung menuduh Raka hanya karena waktunya tidak cocok.",
+        },
+      ],
+    },
+    {
+      slug: "bukti-kuat-lemah",
+      competencyKey: "DET-SUMBER",
+      title: "Bab 3: Bukti Kuat dan Bukti Lemah",
+      simpleGoal:
+        "Kamu belajar menilai bukti: mana yang bisa dipercaya, mana yang perlu dicek ulang.",
+      bigIdea:
+        "Tidak semua informasi punya kekuatan yang sama. Detektif harus menimbang sumber sebelum mengambil keputusan.",
+      estimatedMinutes: 28,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Bukti kuat",
+          body: "Bukti kuat biasanya punya waktu jelas, sumber jelas, dan bisa dicek ulang.",
+          examples: ["Log komputer, foto waktu kejadian, rekaman kamera, dan catatan peminjaman."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Bukti lemah",
+          body: "Bukti lemah biasanya berasal dari ingatan, kesan, atau cerita yang belum dicek.",
+          examples: ["'Aku merasa dia gugup' belum cukup untuk jadi bukti utama."],
+          items: [],
+        },
+      ],
+      cases: [
+        {
+          title: "Cerita Kasus: Buku perpustakaan tertukar",
+          story:
+            "Catatan peminjaman menunjukkan buku dipinjam Lina. Namun Dito melihat buku mirip di meja Arga. Sampul buku itu sama, tetapi nomor inventaris belum dicek.",
+          analysisSteps: [
+            "Catatan peminjaman adalah bukti kuat.",
+            "Penglihatan Dito adalah petunjuk awal, tetapi belum cukup.",
+            "Nomor inventaris harus dicek sebelum menyimpulkan.",
+          ],
+          commonMistake: "Menganggap buku di meja Arga pasti buku yang sama hanya karena sampulnya mirip.",
+        },
+      ],
+    },
+    {
+      slug: "motif-dan-kesempatan",
+      competencyKey: "DET-PENALARAN",
+      title: "Bab 4: Motif dan Kesempatan",
+      simpleGoal:
+        "Kamu belajar membedakan alasan seseorang melakukan sesuatu dan kesempatan untuk melakukannya.",
+      bigIdea:
+        "Motif tanpa kesempatan belum cukup. Kesempatan tanpa bukti juga belum cukup.",
+      estimatedMinutes: 32,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Motif",
+          body: "Motif adalah alasan yang mungkin membuat seseorang melakukan tindakan.",
+          examples: ["Ingin menang lomba bisa menjadi motif, tetapi tetap perlu bukti tindakan."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Kesempatan",
+          body: "Kesempatan berarti seseorang mungkin berada di tempat dan waktu yang cocok dengan kejadian.",
+          examples: ["Ada di ruang komputer saat file hilang berarti punya kesempatan, tapi belum tentu pelaku."],
+          items: [],
+        },
+      ],
+      cases: [
+        {
+          title: "Cerita Kasus: Poster lomba berubah",
+          story:
+            "Poster final lomba berubah satu jam sebelum dicetak. Tiga siswa bisa membuka file. Satu siswa pernah protes soal desain, tetapi log edit terakhir memakai akun panitia umum.",
+          analysisSteps: [
+            "Protes desain bisa menjadi motif, tetapi belum bukti tindakan.",
+            "Akun panitia umum menunjukkan akses masih terlalu luas.",
+            "Perlu cek siapa yang memakai akun pada waktu edit terakhir.",
+          ],
+          commonMistake: "Menuduh siswa yang protes hanya karena punya motif.",
+        },
+      ],
+    },
+    {
+      slug: "wawancara-saksi",
+      competencyKey: "DET-ETIKA",
+      title: "Bab 5: Bertanya ke Saksi",
+      simpleGoal:
+        "Kamu belajar bertanya tanpa memojokkan orang dan mencatat jawaban dengan adil.",
+      bigIdea:
+        "Pertanyaan yang netral membantu saksi mengingat fakta, bukan menebak jawaban yang diinginkan detektif.",
+      estimatedMinutes: 30,
+      lessons: [
+        {
+          type: CurriculumLessonType.PROFESSIONAL_HABIT,
+          title: "Pertanyaan netral",
+          body: "Pertanyaan netral tidak mengarahkan saksi untuk menjawab sesuai dugaan kita.",
+          examples: ["Lebih baik: 'Apa yang kamu lihat?' daripada 'Kamu melihat Raka mengambilnya, kan?'"],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CHECKLIST,
+          title: "Aturan bertanya",
+          body: "Pakai aturan ini agar wawancara tetap adil.",
+          examples: [],
+          items: [
+            "Tanya apa yang dilihat, bukan apa yang ditebak.",
+            "Catat waktu dan tempat jawaban.",
+            "Jangan memaksa saksi memilih pelaku.",
+          ],
+        },
+      ],
+      cases: [
+        {
+          title: "Cerita Kasus: Saksi di koridor",
+          story:
+            "Nina melihat seseorang membawa map biru, tetapi tidak yakin siapa. Temannya berkata pasti itu ketua kelas karena sering membawa map.",
+          analysisSteps: [
+            "Nina memberi fakta sebagian: map biru.",
+            "Temannya memberi dugaan berdasarkan kebiasaan.",
+            "Pertanyaan lanjutan harus fokus pada ciri yang benar-benar terlihat.",
+          ],
+          commonMistake: "Mengubah dugaan teman menjadi fakta.",
+        },
+      ],
+    },
+    {
+      slug: "laporan-detektif",
+      competencyKey: "DET-ETIKA",
+      title: "Bab 6: Laporan Detektif",
+      simpleGoal:
+        "Kamu belajar menulis laporan yang rapi: bukti, alasan, kesimpulan, dan langkah berikutnya.",
+      bigIdea:
+        "Laporan yang baik membuat orang lain paham cara berpikirmu, bukan hanya hasil akhirmu.",
+      estimatedMinutes: 35,
+      lessons: [
+        {
+          type: CurriculumLessonType.EXAMPLE,
+          title: "Rumus laporan",
+          body: "Gunakan pola: Bukti yang kupakai -> Alasan -> Kesimpulan sementara -> Yang masih perlu dicek.",
+          examples: [
+            "Bukti yang kupakai adalah log file 15.20 dan jadwal ruangan. Karena file hilang 15.45, kejadian mungkin terjadi di rentang itu. Namun belum cukup untuk menuduh. Perlu cek riwayat folder.",
+          ],
+          items: [],
+        },
+      ],
+      cases: [
+        {
+          title: "Cerita Kasus: Laporan akhir klub",
+          story:
+            "Kamu punya tiga bukti: waktu file berubah, saksi yang melihat komputer menyala, dan pesan grup yang menyebut file bermasalah. Guru meminta laporan singkat tanpa tuduhan.",
+          analysisSteps: [
+            "Susun bukti dari yang paling kuat.",
+            "Jelaskan hubungan antar bukti.",
+            "Tulis kesimpulan sementara dan data yang masih perlu dicek.",
+          ],
+          commonMistake: "Menulis nama terduga tanpa menjelaskan bukti dan batas kepastian.",
+        },
+      ],
+    },
+  ];
+
+  for (const [moduleIndex, moduleInput] of extraDetectiveModules.entries()) {
+    const module = await prisma.curriculumModule.upsert({
+      where: { worldId_slug: { worldId: world.id, slug: moduleInput.slug } },
+      update: {
+        competencyId: skills[moduleInput.competencyKey].id,
+        title: moduleInput.title,
+        simpleGoal: moduleInput.simpleGoal,
+        bigIdea: moduleInput.bigIdea,
+        estimatedMinutes: moduleInput.estimatedMinutes,
+        status: CurriculumModuleStatus.ACTIVE,
+      },
+      create: {
+        worldId: world.id,
+        competencyId: skills[moduleInput.competencyKey].id,
+        slug: moduleInput.slug,
+        title: moduleInput.title,
+        simpleGoal: moduleInput.simpleGoal,
+        bigIdea: moduleInput.bigIdea,
+        orderNumber: moduleIndex + 2,
+        estimatedMinutes: moduleInput.estimatedMinutes,
+        status: CurriculumModuleStatus.ACTIVE,
+      },
+    });
+
+    for (const [lessonIndex, lesson] of moduleInput.lessons.entries()) {
+      await prisma.curriculumLesson.upsert({
+        where: {
+          moduleId_orderNumber: {
+            moduleId: module.id,
+            orderNumber: lessonIndex + 1,
+          },
+        },
+        update: lesson,
+        create: {
+          moduleId: module.id,
+          orderNumber: lessonIndex + 1,
+          ...lesson,
+        },
+      });
+    }
+
+    for (const [caseIndex, caseStudy] of moduleInput.cases.entries()) {
+      await prisma.curriculumCaseStudy.upsert({
+        where: {
+          moduleId_orderNumber: {
+            moduleId: module.id,
+            orderNumber: caseIndex + 1,
+          },
+        },
+        update: caseStudy,
+        create: {
+          moduleId: module.id,
+          orderNumber: caseIndex + 1,
+          ...caseStudy,
+        },
+      });
+    }
   }
 
   await prisma.remedialRule.upsert({
