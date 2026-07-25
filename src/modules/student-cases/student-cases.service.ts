@@ -36,6 +36,35 @@ type AssignmentWithCase = Prisma.CaseAssignmentGetPayload<{
   include: typeof assignmentInclude;
 }>;
 
+const detectiveLessonPlan = {
+  title: "Observasi Bukti Dasar",
+  simpleGoal: "Kamu belajar membedakan fakta, asumsi, dan petunjuk pengecoh sebelum menjawab kasus.",
+  learnSteps: [
+    {
+      title: "Fakta",
+      body: "Fakta adalah informasi yang bisa dicek. Contoh: waktu, tempat, catatan kamera, atau isi pesan.",
+    },
+    {
+      title: "Asumsi",
+      body: "Asumsi adalah dugaan. Dugaan boleh dicatat, tapi belum boleh jadi kesimpulan.",
+    },
+    {
+      title: "Pengecoh",
+      body: "Pengecoh terlihat menarik, tetapi tidak membantu menjawab pertanyaan utama.",
+    },
+  ],
+  exampleCase: {
+    story: "Kunci kelas hilang. Kamera mencatat pintu terbuka pukul 07.10. Seorang siswa bilang melihat meja berantakan, tapi tidak melihat siapa yang mengambil kunci.",
+    goodAnswer: "Catatan kamera adalah fakta kuat. Meja berantakan adalah petunjuk tambahan. Menuduh seseorang tanpa bukti masih asumsi.",
+  },
+  testRules: [
+    "Baca materi dulu.",
+    "Lihat contoh cara menjawab.",
+    "Jawab tes dengan alasan, bukan tebakan.",
+    "Kalau skor belum cukup, skill itu muncul lagi di tes berikutnya dengan kasus baru.",
+  ],
+};
+
 @Injectable()
 export class StudentCasesService {
   constructor(
@@ -263,25 +292,42 @@ export class StudentCasesService {
       assignment.attempt.answers.map((answer) => [answer.caseQuestionId, answer]),
     );
 
+    const questions = assignment.caseMission.questions.map((question) => {
+      const answer = answersByQuestionId.get(question.id);
+
+      return {
+        questionId: question.id,
+        prompt: question.prompt,
+        skill: question.competency,
+        answerText: answer?.answerText ?? null,
+        score: answer?.score ? Number(answer.score) : 0,
+        matchedKeywords: answer?.matchedKeywords ?? [],
+        expectedReasoning: question.expectedReasoning,
+      };
+    });
+    const weakQuestions = questions.filter((question) => question.score < 60);
+
     return {
       attemptId,
       title: assignment.caseMission.title,
       overallScore: assignment.attempt.overallScore ? Number(assignment.attempt.overallScore) : 0,
       conclusionText: assignment.attempt.conclusionText,
       confidenceLevel: assignment.attempt.confidenceLevel,
-      questions: assignment.caseMission.questions.map((question) => {
-        const answer = answersByQuestionId.get(question.id);
-
-        return {
-          questionId: question.id,
-          prompt: question.prompt,
-          skill: question.competency,
-          answerText: answer?.answerText ?? null,
-          score: answer?.score ? Number(answer.score) : 0,
-          matchedKeywords: answer?.matchedKeywords ?? [],
-          expectedReasoning: question.expectedReasoning,
-        };
-      }),
+      questions,
+      nextRecommendation: {
+        canRetakeSameCase: false,
+        title:
+          weakQuestions.length > 0
+            ? "Belajar ulang singkat, lalu tes berikutnya akan mengulang skill yang lemah."
+            : "Bagus. Tes berikutnya naik ke kasus dengan bukti lebih banyak.",
+        message:
+          weakQuestions.length > 0
+            ? `Skill yang perlu diulang: ${weakQuestions
+                .map((question) => question.skill.name)
+                .join(", ")}. Kamu tidak perlu mengulang kasus yang sama; sistem akan memberi kasus baru dengan pola mirip.`
+            : "Kamu sudah cukup kuat di modul ini. Lanjut ke kronologi dan hubungan sebab-akibat.",
+        focusSkills: weakQuestions.map((question) => question.skill.name),
+      },
     };
   }
 
@@ -314,6 +360,7 @@ export class StudentCasesService {
         openingStory: assignment.caseMission.openingStory,
         estimatedMinutes: assignment.caseMission.estimatedMinutes,
       },
+      lessonPlan: detectiveLessonPlan,
       attempt: assignment.attempt
         ? { id: assignment.attempt.id, status: assignment.attempt.status }
         : null,
