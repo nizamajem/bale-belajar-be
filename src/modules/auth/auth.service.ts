@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -43,6 +44,8 @@ type AuthResponse = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly jwtService: JwtService,
@@ -232,7 +235,8 @@ export class AuthService {
         dto.idToken,
       );
       payload = decoded;
-    } catch {
+    } catch (error) {
+      this.logger.error("Firebase verifyIdToken gagal", error as Error);
       throw new UnauthorizedException("Token Firebase tidak valid.");
     }
 
