@@ -1237,6 +1237,252 @@ async function seedBaleDetective() {
       },
     });
   }
+
+  // Kasus 2 - berpusat pada DET-OBSERVASI (skill yang belum tercakup kasus 1)
+  const caseMissionCalculator = await prisma.caseMission.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000003" },
+    update: { curriculumModuleId: detectiveModule.id },
+    create: {
+      id: "00000000-0000-0000-0000-000000000003",
+      worldId: world.id,
+      curriculumModuleId: detectiveModule.id,
+      title: "Kasus Kalkulator yang Hilang",
+      openingStory:
+        "Setelah ulangan Matematika selesai, kalkulator pinjaman sekolah yang dipakai Rafi hilang dari mejanya. Empat siswa duduk berdekatan dengannya. Guru piket minta kamu bantu selidiki sebelum melapor ke wali kelas.",
+      estimatedMinutes: 20,
+      status: MissionStatus.ACTIVE,
+    },
+  });
+
+  const calculatorEvidenceInputs = [
+    {
+      type: "DOCUMENT",
+      content: "Denah tempat duduk: Rafi di baris 2 kursi 3, diapit Sari (kiri) dan Dimas (kanan). Wulan duduk tepat di belakang Rafi.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+    {
+      type: "STATEMENT",
+      content: "Rafi ingat meletakkan kalkulator di sudut kanan atas mejanya sebelum ulangan dimulai.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+    {
+      type: "STATEMENT",
+      content: "Petugas piket melihat Wulan membungkuk ke arah meja Rafi saat mengumpulkan kertas ulangan.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+    {
+      type: "PHOTO_DESC",
+      content: "Foto meja Rafi setelah ulangan menunjukkan tempat pensil terbuka dan kertas berserakan, tapi tidak ada kalkulator.",
+      relevance: EvidenceRelevance.PARTIAL,
+      sourceStrength: EvidenceStrength.LOW,
+    },
+    {
+      type: "STATEMENT",
+      content: "Dimas bilang dia tidak menyentuh meja Rafi sama sekali selama ulangan.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+    {
+      type: "LOG",
+      content: "Kalkulator yang sama ditemukan petugas kebersihan di kolong meja paling belakang, dekat tempat sampah, sore harinya.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+  ];
+
+  for (const [index, evidence] of calculatorEvidenceInputs.entries()) {
+    await prisma.caseEvidence.upsert({
+      where: {
+        caseMissionId_orderNumber: {
+          caseMissionId: caseMissionCalculator.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: {},
+      create: {
+        caseMissionId: caseMissionCalculator.id,
+        orderNumber: index + 1,
+        ...evidence,
+      },
+    });
+  }
+
+  const calculatorQuestionInputs = [
+    {
+      skill: "DET-OBSERVASI",
+      prompt: "Detail apa dari tempat duduk dan posisi kalkulator yang penting diperhatikan sebelum menuduh siapa pun?",
+      expectedKeywords: ["posisi", "sudut kanan", "duduk", "dekat", "meja", "sebelum"],
+      expectedReasoning:
+        "Posisi kalkulator (sudut kanan atas) dan siapa yang duduk berdekatan penting dicatat dulu sebagai baseline, sebelum menghubungkannya dengan kejadian lain.",
+    },
+    {
+      skill: "DET-PENALARAN",
+      prompt: "Buat minimal dua hipotesis tentang bagaimana kalkulator bisa berpindah dari meja Rafi ke kolong meja belakang.",
+      expectedKeywords: ["terjatuh", "tersenggol", "sengaja", "tidak sengaja", "terdorong", "terbawa"],
+      expectedReasoning:
+        "Bisa jadi kalkulator tidak sengaja tersenggol atau terjatuh saat pengumpulan kertas lalu tergeser ke belakang, atau ada yang memindahkannya sengaja - dua-duanya perlu dipertimbangkan tanpa buru-buru memilih satu.",
+    },
+    {
+      skill: "DET-KRONOLOGI",
+      prompt: "Susun urutan kejadian dari sebelum ulangan sampai kalkulator ditemukan sore hari. Adakah bagian yang masih kosong?",
+      expectedKeywords: ["sebelum", "saat", "setelah", "sore", "ditemukan", "urutan"],
+      expectedReasoning:
+        "Ada jeda waktu yang belum terjelaskan antara akhir ulangan dan sore hari saat ditemukan - bagian ini perlu digali lebih lanjut, bukan diasumsikan.",
+    },
+    {
+      skill: "DET-ETIKA",
+      prompt: "Wulan sempat kelihatan membungkuk ke meja Rafi. Bolehkah itu langsung dijadikan bukti dia yang mengambil kalkulator? Jelaskan.",
+      expectedKeywords: ["belum cukup", "tidak boleh menuduh", "banyak alasan", "praduga", "adil"],
+      expectedReasoning:
+        "Membungkuk ke arah meja bisa punya banyak alasan lain, misalnya mengambil kertas atau merapikan. Satu pengamatan saja belum cukup untuk menuduh - perlu bukti pendukung lain.",
+    },
+  ] as const;
+
+  for (const [index, question] of calculatorQuestionInputs.entries()) {
+    await prisma.caseQuestion.upsert({
+      where: {
+        caseMissionId_orderNumber: {
+          caseMissionId: caseMissionCalculator.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: {},
+      create: {
+        caseMissionId: caseMissionCalculator.id,
+        competencyId: skills[question.skill].id,
+        orderNumber: index + 1,
+        prompt: question.prompt,
+        expectedKeywords: [...question.expectedKeywords],
+        expectedReasoning: question.expectedReasoning,
+      },
+    });
+  }
+
+  // Kasus 3 - berpusat pada DET-MEMORI (skill yang belum tercakup kasus 1 & 2)
+  const caseMissionLampu = await prisma.caseMission.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000004" },
+    update: { curriculumModuleId: detectiveModule.id },
+    create: {
+      id: "00000000-0000-0000-0000-000000000004",
+      worldId: world.id,
+      curriculumModuleId: detectiveModule.id,
+      title: "Kasus Dua Cerita yang Berbeda",
+      openingStory:
+        "Saat gladi bersih pentas seni, satu set lampu dekorasi panggung jatuh dan pecah. Dua siswa yang sama-sama ada di dekat panggung, Ica dan Bayu, menceritakan kejadian dengan detail yang berbeda. Kamu diminta bantu memahami apa yang sebenarnya terjadi.",
+      estimatedMinutes: 20,
+      status: MissionStatus.ACTIVE,
+    },
+  });
+
+  const lampuEvidenceInputs = [
+    {
+      type: "STATEMENT",
+      content: "Ica bilang lampu jatuh sendiri karena kabelnya longgar, sekitar pukul 15.00.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+    {
+      type: "STATEMENT",
+      content: "Bayu bilang ada yang tidak sengaja menyenggol tiang lampu saat memindahkan properti, sekitar pukul 15.15.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+    {
+      type: "LOG",
+      content: "Jadwal gladi bersih mencatat sesi pemindahan properti panggung berlangsung pukul 15.05-15.20.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+    {
+      type: "DOCUMENT",
+      content: "Catatan teknisi: kabel lampu memang sudah longgar sejak pemasangan pagi hari.",
+      relevance: EvidenceRelevance.RELEVANT,
+      sourceStrength: EvidenceStrength.HIGH,
+    },
+    {
+      type: "PHOTO_DESC",
+      content: "Foto lokasi menunjukkan tiang lampu condong dan beberapa properti panggung tergeser di dekatnya.",
+      relevance: EvidenceRelevance.PARTIAL,
+      sourceStrength: EvidenceStrength.LOW,
+    },
+    {
+      type: "MESSAGE",
+      content: "Pesan grup panitia: 'yang penting nggak ada yang kena, lampunya emang udah goyang dari tadi', dikirim salah satu panitia pukul 15.30.",
+      relevance: EvidenceRelevance.PARTIAL,
+      sourceStrength: EvidenceStrength.MEDIUM,
+    },
+  ];
+
+  for (const [index, evidence] of lampuEvidenceInputs.entries()) {
+    await prisma.caseEvidence.upsert({
+      where: {
+        caseMissionId_orderNumber: {
+          caseMissionId: caseMissionLampu.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: {},
+      create: {
+        caseMissionId: caseMissionLampu.id,
+        orderNumber: index + 1,
+        ...evidence,
+      },
+    });
+  }
+
+  const lampuQuestionInputs = [
+    {
+      skill: "DET-MEMORI",
+      prompt: "Ica dan Bayu ingat waktu kejadian yang sedikit berbeda (15.00 vs 15.15). Kenapa dua orang yang sama-sama ada di lokasi bisa punya ingatan waktu yang berbeda, padahal bukan berarti salah satu berbohong?",
+      expectedKeywords: ["ingatan", "tidak persis", "wajar", "fokus", "berbeda", "bukan berbohong"],
+      expectedReasoning:
+        "Ingatan manusia soal waktu sering tidak presis, apalagi saat fokus ke hal lain. Perbedaan kecil semacam ini wajar dan bukan otomatis tanda kebohongan - perlu dicek dengan bukti lain seperti jadwal gladi bersih.",
+    },
+    {
+      skill: "DET-OBSERVASI",
+      prompt: "Detail apa dari catatan teknisi dan foto lokasi yang mendukung salah satu cerita?",
+      expectedKeywords: ["kabel", "longgar", "condong", "properti", "tergeser", "sejak pagi"],
+      expectedReasoning:
+        "Catatan teknisi soal kabel longgar sejak pagi dan foto tiang yang condong sama-sama mendukung kemungkinan lampu memang sudah rawan jatuh, bukan cuma karena tersenggol.",
+    },
+    {
+      skill: "DET-SUMBER",
+      prompt: "Dari semua bukti, mana yang paling bisa dipercaya untuk menjelaskan sebab lampu jatuh? Kenapa?",
+      expectedKeywords: ["catatan teknisi", "paling", "independen", "dicatat", "sebelum", "kuat"],
+      expectedReasoning:
+        "Catatan teknisi paling kuat karena dibuat sebelum kejadian dan independen dari cerita saksi mata, sehingga tidak terpengaruh ingatan yang bisa keliru.",
+    },
+    {
+      skill: "DET-ETIKA",
+      prompt: "Pesan grup panitia terkesan langsung menyalahkan lampu yang 'emang udah goyang'. Apakah kesimpulan itu adil buat semua pihak, termasuk yang mungkin menyenggol tiang? Jelaskan.",
+      expectedKeywords: ["belum tentu adil", "tidak boleh langsung", "kedua kemungkinan", "cek dulu", "tidak menuduh"],
+      expectedReasoning:
+        "Menyimpulkan terlalu cepat lewat pesan grup bisa tidak adil kalau ternyata ada faktor lain (tersenggol) yang belum dicek. Kesimpulan sebaiknya menunggu semua bukti dipertimbangkan bersama.",
+    },
+  ] as const;
+
+  for (const [index, question] of lampuQuestionInputs.entries()) {
+    await prisma.caseQuestion.upsert({
+      where: {
+        caseMissionId_orderNumber: {
+          caseMissionId: caseMissionLampu.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: {},
+      create: {
+        caseMissionId: caseMissionLampu.id,
+        competencyId: skills[question.skill].id,
+        orderNumber: index + 1,
+        prompt: question.prompt,
+        expectedKeywords: [...question.expectedKeywords],
+        expectedReasoning: question.expectedReasoning,
+      },
+    });
+  }
 }
 
 main()
