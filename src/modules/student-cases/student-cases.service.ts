@@ -447,16 +447,17 @@ export class StudentCasesService {
   }
 
   private async pickCaseForToday(worldId: string) {
-    const activeCase = await this.prisma.caseMission.findFirst({
+    const activeCases = await this.prisma.caseMission.findMany({
       where: { worldId, status: "ACTIVE" },
       orderBy: { createdAt: "asc" },
     });
 
-    if (!activeCase) {
+    if (activeCases.length === 0) {
       throw new NotFoundException("Belum ada kasus aktif untuk dunia ini.");
     }
 
-    return activeCase;
+    const dayIndex = Math.floor(Date.now() / 86_400_000);
+    return activeCases[dayIndex % activeCases.length];
   }
 
   private serializeAssignment(assignment: AssignmentWithCase) {

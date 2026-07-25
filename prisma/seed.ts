@@ -1094,6 +1094,328 @@ async function seedBaleDetective() {
     }
   }
 
+  const expertDetectiveModules = [
+    {
+      slug: "pola-dan-anomali",
+      competencyKey: "DET-OBSERVASI",
+      title: "Bab 7: Pola dan Anomali",
+      simpleGoal:
+        "Kamu belajar mencari pola normal, lalu menemukan detail yang berbeda dan perlu diselidiki.",
+      bigIdea:
+        "Detektif expert tidak hanya melihat satu bukti. Mereka membandingkan pola, kebiasaan, dan perubahan kecil yang tidak biasa.",
+      estimatedMinutes: 35,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Pola normal",
+          body: "Pola normal adalah kebiasaan yang biasanya terjadi. Anomali adalah hal yang berbeda dari pola itu.",
+          examples: ["Jika komputer lab biasanya dimatikan pukul 16.00 tetapi hari ini menyala sampai 17.10, itu anomali."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CHECKLIST,
+          title: "Checklist anomali",
+          body: "Gunakan ini saat bukti terlihat membingungkan.",
+          examples: [],
+          items: [
+            "Apa kebiasaan normalnya?",
+            "Detail mana yang berbeda?",
+            "Apakah perbedaannya penting untuk kasus?",
+            "Bukti apa yang bisa menjelaskan perbedaan itu?",
+          ],
+        },
+      ],
+      cases: [
+        {
+          title: "Studi Kasus: Lampu lab menyala",
+          story:
+            "Lampu lab biasanya padam pukul 16.00. Hari ini masih menyala pukul 17.10. Daftar piket menunjukkan tidak ada jadwal tambahan, tetapi log pintu mencatat akses pukul 16.48.",
+          analysisSteps: [
+            "Pola normal: lab tutup pukul 16.00.",
+            "Anomali: lampu masih menyala dan ada akses pukul 16.48.",
+            "Langkah aman: cek siapa yang punya akses dan alasan masuk.",
+          ],
+          commonMistake: "Menganggap lampu menyala berarti ada pelanggaran tanpa mengecek alasan akses.",
+        },
+      ],
+    },
+    {
+      slug: "kontradiksi-saksi",
+      competencyKey: "DET-MEMORI",
+      title: "Bab 8: Kontradiksi Saksi",
+      simpleGoal:
+        "Kamu belajar membaca dua cerita yang berbeda tanpa langsung menyebut seseorang berbohong.",
+      bigIdea:
+        "Cerita yang berbeda bisa terjadi karena posisi, fokus, ingatan, atau sudut pandang. Detektif expert mengecek kontradiksi dengan bukti lain.",
+      estimatedMinutes: 38,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Kontradiksi",
+          body: "Kontradiksi adalah dua informasi yang tidak cocok. Tidak semua kontradiksi berarti kebohongan.",
+          examples: ["Saksi A melihat pukul 15.00, saksi B melihat pukul 15.10. Bisa jadi salah ingat, bukan bohong."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.PROFESSIONAL_HABIT,
+          title: "Sikap saat cerita berbeda",
+          body: "Catat perbedaan, jangan memihak dulu.",
+          examples: [],
+          items: [
+            "Tanya posisi saksi saat melihat kejadian.",
+            "Cek apakah saksi melihat langsung atau mendengar dari orang lain.",
+            "Bandingkan dengan bukti waktu yang lebih kuat.",
+          ],
+        },
+      ],
+      cases: [
+        {
+          title: "Studi Kasus: Suara di gudang olahraga",
+          story:
+            "Ayu bilang mendengar suara jatuh sebelum bel masuk. Fajar bilang suara itu terjadi setelah bel. Rekaman bel sekolah menunjukkan bel berbunyi pukul 13.00, sementara chat tim olahraga dikirim pukul 13.03.",
+          analysisSteps: [
+            "Ada kontradiksi waktu antara saksi.",
+            "Rekaman bel menjadi jangkar waktu.",
+            "Chat pukul 13.03 membantu mempersempit urutan kejadian.",
+          ],
+          commonMistake: "Memilih saksi yang terdengar lebih yakin tanpa membandingkan bukti waktu.",
+        },
+      ],
+    },
+    {
+      slug: "prioritas-investigasi",
+      competencyKey: "DET-PENALARAN",
+      title: "Bab 9: Prioritas Investigasi",
+      simpleGoal:
+        "Kamu belajar memilih langkah penyelidikan paling penting saat bukti terlalu banyak.",
+      bigIdea:
+        "Detektif expert tidak mengecek semuanya sekaligus. Mereka memilih langkah yang paling cepat mengurangi ketidakpastian.",
+      estimatedMinutes: 40,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Prioritas",
+          body: "Prioritas investigasi adalah memilih bukti atau pertanyaan yang paling membantu menjawab inti kasus.",
+          examples: ["Jika file hilang, cek riwayat file lebih penting daripada warna tas siswa."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.CHECKLIST,
+          title: "Urutan cek",
+          body: "Pilih langkah yang paling besar dampaknya.",
+          examples: [],
+          items: [
+            "Cek bukti otomatis dulu.",
+            "Cek rentang waktu paling sempit.",
+            "Cek saksi yang melihat langsung.",
+            "Baru cek petunjuk lemah.",
+          ],
+        },
+      ],
+      cases: [
+        {
+          title: "Studi Kasus: Tablet kelas mati",
+          story:
+            "Tablet kelas mati saat presentasi. Ada tiga info: baterai tinggal 8%, charger dipakai kelas lain, dan satu siswa sempat membuka pengaturan. Guru ingin tahu langkah cek pertama.",
+          analysisSteps: [
+            "Cek penyebab paling sederhana: baterai dan charger.",
+            "Cek pengaturan jika masalah daya sudah jelas bukan penyebab.",
+            "Jangan langsung menyalahkan siswa yang membuka pengaturan.",
+          ],
+          commonMistake: "Mengejar petunjuk dramatis sebelum mengecek penyebab paling mungkin.",
+        },
+      ],
+    },
+    {
+      slug: "kasus-digital",
+      competencyKey: "DET-SUMBER",
+      title: "Bab 10: Jejak Digital Dasar",
+      simpleGoal:
+        "Kamu belajar membaca log, waktu edit, riwayat file, dan pesan digital dengan hati-hati.",
+      bigIdea:
+        "Jejak digital kuat karena punya waktu, tetapi tetap perlu konteks: siapa yang memakai akun, perangkat, dan izin akses.",
+      estimatedMinutes: 42,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Log digital",
+          body: "Log digital adalah catatan sistem tentang aktivitas, waktu, dan akun yang digunakan.",
+          examples: ["File diedit pukul 14.22 oleh akun panitia. Ini bukti waktu, tetapi belum pasti siapa orang di balik akun."],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.EXAMPLE,
+          title: "Cara membaca log",
+          body: "Baca log sebagai petunjuk, bukan vonis. Log menjawab apa dan kapan, tetapi belum selalu menjawab siapa dan mengapa.",
+          examples: ["Akun A login pukul 15.10 -> cek apakah akun dipakai sendiri atau bersama."],
+          items: [],
+        },
+      ],
+      cases: [
+        {
+          title: "Studi Kasus: Akun panitia",
+          story:
+            "Poster acara berubah pukul 18.12 memakai akun panitia. Tiga orang tahu password akun itu. Log perangkat menunjukkan akses dari komputer lab, bukan laptop pribadi.",
+          analysisSteps: [
+            "Log menunjukkan akun dan waktu.",
+            "Password bersama membuat identitas pengguna belum pasti.",
+            "Perangkat lab membantu mempersempit lokasi.",
+          ],
+          commonMistake: "Menganggap pemilik akun pasti pelaku padahal akun dipakai bersama.",
+        },
+      ],
+    },
+    {
+      slug: "wawancara-lanjutan",
+      competencyKey: "DET-ETIKA",
+      title: "Bab 11: Wawancara Lanjutan",
+      simpleGoal:
+        "Kamu belajar memilih pertanyaan lanjutan yang netral, spesifik, dan tidak membuat saksi tertekan.",
+      bigIdea:
+        "Pertanyaan yang buruk bisa merusak kesaksian. Pertanyaan yang baik membantu saksi mengingat detail tanpa diarahkan.",
+      estimatedMinutes: 38,
+      lessons: [
+        {
+          type: CurriculumLessonType.CONCEPT,
+          title: "Pertanyaan lanjutan",
+          body: "Pertanyaan lanjutan dipakai setelah saksi memberi informasi awal. Tujuannya memperjelas, bukan memojokkan.",
+          examples: ["Tanya: 'Kamu berdiri di mana saat melihat itu?' bukan 'Kenapa kamu yakin dia pelakunya?'"],
+          items: [],
+        },
+        {
+          type: CurriculumLessonType.RUBRIC,
+          title: "Pertanyaan bagus",
+          body: "Pertanyaan bagus harus netral, spesifik, dan bisa membantu verifikasi.",
+          examples: [],
+          items: [
+            "Tidak menyebut terduga di awal.",
+            "Meminta waktu, lokasi, atau detail yang bisa dicek.",
+            "Tidak memaksa saksi memilih satu orang.",
+          ],
+        },
+      ],
+      cases: [
+        {
+          title: "Studi Kasus: Saksi melihat jaket merah",
+          story:
+            "Saksi bilang melihat jaket merah lewat koridor. Tiga siswa punya jaket merah. Kamu harus memilih pertanyaan lanjutan yang paling adil.",
+          analysisSteps: [
+            "Jaket merah belum cukup membedakan orang.",
+            "Tanya detail lain seperti arah jalan, tinggi, atau barang yang dibawa.",
+            "Jangan menyebut nama siswa dulu.",
+          ],
+          commonMistake: "Bertanya 'apakah itu Raka?' sebelum saksi memberi detail lain.",
+        },
+      ],
+    },
+    {
+      slug: "final-investigation",
+      competencyKey: "DET-ETIKA",
+      title: "Bab 12: Final Investigation",
+      simpleGoal:
+        "Kamu menyelesaikan kasus besar dengan banyak bukti, saksi, jejak digital, dan laporan akhir.",
+      bigIdea:
+        "Detektif expert menggabungkan observasi, kronologi, sumber, etika, dan laporan menjadi keputusan yang adil.",
+      estimatedMinutes: 50,
+      lessons: [
+        {
+          type: CurriculumLessonType.MASTERY_PATH,
+          title: "Misi akhir",
+          body: "Di misi akhir, kamu tidak mencari jawaban cepat. Kamu membangun laporan lengkap dari bukti terbaik.",
+          examples: [],
+          items: [
+            "Kelompokkan bukti kuat, sedang, dan lemah.",
+            "Susun timeline.",
+            "Tulis minimal dua hipotesis.",
+            "Pilih pertanyaan lanjutan.",
+            "Buat kesimpulan sementara dan rekomendasi tindak lanjut.",
+          ],
+        },
+        {
+          type: CurriculumLessonType.EXAMPLE,
+          title: "Format laporan expert",
+          body: "Ringkasan kasus -> bukti utama -> analisis timeline -> hipotesis -> kesimpulan sementara -> rekomendasi.",
+          examples: [
+            "Kesimpulan expert tidak harus menuduh. Kesimpulan expert harus bisa dipertanggungjawabkan.",
+          ],
+          items: [],
+        },
+      ],
+      cases: [
+        {
+          title: "Studi Kasus: Piala kelas berpindah",
+          story:
+            "Piala kelas berpindah dari lemari ke ruang musik. Ada log kunci, dua saksi, foto koridor, dan pesan grup. Semua bukti mengarah ke beberapa kemungkinan berbeda.",
+          analysisSteps: [
+            "Pisahkan bukti berdasarkan kekuatan.",
+            "Susun timeline dari log kunci dan foto koridor.",
+            "Tulis kesimpulan sementara tanpa tuduhan final.",
+          ],
+          commonMistake: "Memilih satu pelaku hanya karena cerita paling menarik.",
+        },
+      ],
+    },
+  ];
+
+  for (const [moduleIndex, moduleInput] of expertDetectiveModules.entries()) {
+    const module = await prisma.curriculumModule.upsert({
+      where: { worldId_slug: { worldId: world.id, slug: moduleInput.slug } },
+      update: {
+        competencyId: skills[moduleInput.competencyKey].id,
+        title: moduleInput.title,
+        simpleGoal: moduleInput.simpleGoal,
+        bigIdea: moduleInput.bigIdea,
+        estimatedMinutes: moduleInput.estimatedMinutes,
+        status: CurriculumModuleStatus.ACTIVE,
+      },
+      create: {
+        worldId: world.id,
+        competencyId: skills[moduleInput.competencyKey].id,
+        slug: moduleInput.slug,
+        title: moduleInput.title,
+        simpleGoal: moduleInput.simpleGoal,
+        bigIdea: moduleInput.bigIdea,
+        orderNumber: moduleIndex + 7,
+        estimatedMinutes: moduleInput.estimatedMinutes,
+        status: CurriculumModuleStatus.ACTIVE,
+      },
+    });
+
+    for (const [lessonIndex, lesson] of moduleInput.lessons.entries()) {
+      await prisma.curriculumLesson.upsert({
+        where: {
+          moduleId_orderNumber: {
+            moduleId: module.id,
+            orderNumber: lessonIndex + 1,
+          },
+        },
+        update: lesson,
+        create: {
+          moduleId: module.id,
+          orderNumber: lessonIndex + 1,
+          ...lesson,
+        },
+      });
+    }
+
+    for (const [caseIndex, caseStudy] of moduleInput.cases.entries()) {
+      await prisma.curriculumCaseStudy.upsert({
+        where: {
+          moduleId_orderNumber: {
+            moduleId: module.id,
+            orderNumber: caseIndex + 1,
+          },
+        },
+        update: caseStudy,
+        create: {
+          moduleId: module.id,
+          orderNumber: caseIndex + 1,
+          ...caseStudy,
+        },
+      });
+    }
+  }
+
   await prisma.remedialRule.upsert({
     where: { id: "00000000-0000-0000-0000-000000000101" },
     update: {
@@ -1482,6 +1804,272 @@ async function seedBaleDetective() {
         expectedReasoning: question.expectedReasoning,
       },
     });
+  }
+
+  const detectiveModulesBySlug = new Map(
+    (
+      await prisma.curriculumModule.findMany({
+        where: { worldId: world.id },
+      })
+    ).map((module) => [module.slug, module]),
+  );
+
+  const additionalCaseMissions = [
+    {
+      id: "00000000-0000-0000-0000-000000000005",
+      moduleSlug: "pola-dan-anomali",
+      title: "Kasus Lampu Lab yang Menyala",
+      openingStory:
+        "Lampu lab komputer biasanya padam pukul 16.00. Hari ini lampu masih menyala pukul 17.10, dan ada tugas kelompok yang dikabarkan hilang dari folder kelas.",
+      evidence: [
+        ["LOG", "Log pintu lab mencatat akses pukul 16.48 memakai kartu akses guru piket.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["DOCUMENT", "Jadwal resmi lab berakhir pukul 16.00 dan tidak ada jadwal tambahan.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["STATEMENT", "Dua siswa melihat cahaya lab dari koridor sekitar pukul 17.05.", EvidenceRelevance.PARTIAL, EvidenceStrength.MEDIUM],
+        ["MESSAGE", "Chat kelas pukul 16.55: 'folder tugas kok kosong ya?'", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+      ],
+      questions: [
+        {
+          skill: "DET-OBSERVASI",
+          prompt: "Pola normal apa yang berubah dalam kasus ini?",
+          expectedKeywords: ["lab", "16.00", "17.10", "akses", "jadwal", "anomali"],
+          expectedReasoning:
+            "Pola normalnya lab tutup pukul 16.00. Anomalinya lampu menyala sampai 17.10 dan ada akses pukul 16.48, sehingga perlu cek alasan akses dan hubungan dengan folder kosong.",
+        },
+        {
+          skill: "DET-SUMBER",
+          prompt: "Bukti mana yang paling kuat untuk mulai investigasi?",
+          expectedKeywords: ["log", "pintu", "jadwal", "akses", "kuat", "waktu"],
+          expectedReasoning:
+            "Log pintu dan jadwal lab paling kuat karena punya sumber jelas dan waktu spesifik.",
+        },
+        {
+          skill: "DET-PENALARAN",
+          prompt: "Apa dua kemungkinan penyebab folder tugas kosong?",
+          expectedKeywords: ["terhapus", "dipindahkan", "akses", "salah folder", "tidak sengaja", "sengaja"],
+          expectedReasoning:
+            "Kemungkinan folder dipindahkan/salah folder, terhapus tidak sengaja, atau ada akses yang mengubah isi folder. Semua perlu dicek sebelum menuduh.",
+        },
+      ],
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000006",
+      moduleSlug: "kontradiksi-saksi",
+      title: "Kasus Suara Gudang Olahraga",
+      openingStory:
+        "Bola pertandingan jatuh dari rak gudang olahraga. Dua saksi memberi waktu kejadian berbeda: sebelum bel dan setelah bel.",
+      evidence: [
+        ["STATEMENT", "Ayu berkata mendengar suara jatuh sebelum bel masuk.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+        ["STATEMENT", "Fajar berkata suara jatuh terdengar setelah bel masuk.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+        ["LOG", "Rekaman bel sekolah menunjukkan bel berbunyi pukul 13.00.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["MESSAGE", "Chat tim olahraga dikirim pukul 13.03: 'rak bola di gudang berantakan'.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+      ],
+      questions: [
+        {
+          skill: "DET-MEMORI",
+          prompt: "Kenapa dua saksi bisa memberi waktu berbeda tanpa berarti salah satu berbohong?",
+          expectedKeywords: ["ingatan", "fokus", "berbeda", "wajar", "belum tentu", "bohong"],
+          expectedReasoning:
+            "Ingatan waktu bisa berbeda karena fokus saksi berbeda. Perlu jangkar waktu seperti bel dan chat sebelum menyimpulkan.",
+        },
+        {
+          skill: "DET-KRONOLOGI",
+          prompt: "Susun kronologi paling aman dari bukti yang tersedia.",
+          expectedKeywords: ["bel", "13.00", "chat", "13.03", "sebelum", "setelah"],
+          expectedReasoning:
+            "Bel pukul 13.00 dan chat 13.03 menjadi jangkar. Kejadian mungkin terjadi dekat waktu bel, tetapi detail tepatnya perlu bukti tambahan.",
+        },
+      ],
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000007",
+      moduleSlug: "prioritas-investigasi",
+      title: "Kasus Tablet Kelas Mati",
+      openingStory:
+        "Tablet kelas mati saat presentasi. Semua panik karena presentasi harus dimulai lima menit lagi.",
+      evidence: [
+        ["DOCUMENT", "Catatan baterai terakhir menunjukkan 8% pukul 09.20.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["STATEMENT", "Satu siswa berkata charger tablet dipinjam kelas sebelah.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+        ["LOG", "Riwayat pengaturan menunjukkan mode hemat daya diubah pukul 09.18.", EvidenceRelevance.PARTIAL, EvidenceStrength.HIGH],
+        ["STATEMENT", "Guru melihat tablet masih menyala saat masuk kelas pukul 09.15.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+      ],
+      questions: [
+        {
+          skill: "DET-PENALARAN",
+          prompt: "Langkah cek pertama apa yang paling masuk akal?",
+          expectedKeywords: ["baterai", "charger", "cek", "sederhana", "daya", "prioritas"],
+          expectedReasoning:
+            "Cek baterai dan charger dulu karena itu penyebab paling sederhana dan didukung bukti baterai 8%.",
+        },
+        {
+          skill: "DET-ETIKA",
+          prompt: "Bolehkah langsung menyalahkan siswa yang mengubah mode hemat daya?",
+          expectedKeywords: ["belum cukup", "tidak boleh", "menuduh", "cek dulu", "adil"],
+          expectedReasoning:
+            "Belum boleh menuduh karena perubahan mode hemat daya bisa justru usaha menghemat baterai, bukan penyebab tablet mati.",
+        },
+      ],
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000008",
+      moduleSlug: "kasus-digital",
+      title: "Kasus Akun Panitia Bersama",
+      openingStory:
+        "Poster acara sekolah berubah sendiri pada malam hari. Log menunjukkan perubahan dilakukan oleh akun panitia bersama.",
+      evidence: [
+        ["LOG", "Poster diedit pukul 18.12 oleh akun panitia.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["DOCUMENT", "Tiga siswa panitia mengetahui password akun tersebut.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["LOG", "Akses berasal dari komputer lab, bukan laptop pribadi.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["MESSAGE", "Salah satu panitia mengirim pesan: 'aku nggak suka desain lama' pukul 17.40.", EvidenceRelevance.PARTIAL, EvidenceStrength.MEDIUM],
+      ],
+      questions: [
+        {
+          skill: "DET-SUMBER",
+          prompt: "Apa yang bisa dan belum bisa dibuktikan oleh log digital ini?",
+          expectedKeywords: ["akun", "18.12", "komputer lab", "belum pasti", "siapa", "password"],
+          expectedReasoning:
+            "Log membuktikan waktu, akun, dan perangkat. Namun belum membuktikan siapa orangnya karena akun dipakai bersama.",
+        },
+        {
+          skill: "DET-PENALARAN",
+          prompt: "Apa langkah lanjutan paling berguna?",
+          expectedKeywords: ["cek", "akses", "lab", "saksi", "jadwal", "password"],
+          expectedReasoning:
+            "Cek siapa yang berada di lab sekitar pukul 18.12 dan siapa yang memakai akun bersama saat itu.",
+        },
+      ],
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000009",
+      moduleSlug: "wawancara-lanjutan",
+      title: "Kasus Jaket Merah di Koridor",
+      openingStory:
+        "Saksi melihat seseorang berjaket merah lewat koridor dekat ruang guru. Ada tiga siswa yang punya jaket merah.",
+      evidence: [
+        ["STATEMENT", "Saksi hanya yakin melihat jaket merah dan tas hitam.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+        ["DOCUMENT", "Daftar piket menunjukkan tiga siswa berjaket merah berada di area sekolah.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["PHOTO_DESC", "Foto CCTV buram menunjukkan arah orang itu berjalan ke tangga barat.", EvidenceRelevance.PARTIAL, EvidenceStrength.LOW],
+      ],
+      questions: [
+        {
+          skill: "DET-ETIKA",
+          prompt: "Pertanyaan lanjutan apa yang paling netral untuk saksi?",
+          expectedKeywords: ["apa", "lihat", "arah", "tas", "posisi", "netral"],
+          expectedReasoning:
+            "Pertanyaan netral menanyakan apa yang dilihat, arah berjalan, posisi saksi, dan ciri tambahan, bukan menyebut nama terduga.",
+        },
+        {
+          skill: "DET-SUMBER",
+          prompt: "Mengapa jaket merah belum cukup sebagai bukti utama?",
+          expectedKeywords: ["tiga", "mirip", "belum cukup", "ciri", "tambahan", "cek"],
+          expectedReasoning:
+            "Jaket merah belum cukup karena ada tiga siswa dengan ciri yang sama. Perlu ciri tambahan dan bukti pendukung.",
+        },
+      ],
+    },
+    {
+      id: "00000000-0000-0000-0000-000000000010",
+      moduleSlug: "final-investigation",
+      title: "Final Case: Piala Kelas Berpindah",
+      openingStory:
+        "Piala kelas berpindah dari lemari ke ruang musik. Kasus ini punya log kunci, saksi, foto koridor, dan pesan grup. Kamu harus membuat kesimpulan final yang adil.",
+      evidence: [
+        ["LOG", "Kunci lemari dipinjam pukul 10.05 dan dikembalikan pukul 10.22.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+        ["STATEMENT", "Saksi A melihat kotak piala dibawa ke arah tangga pukul 10.20.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+        ["PHOTO_DESC", "Foto koridor pukul 10.24 menunjukkan bayangan orang membawa kotak besar.", EvidenceRelevance.PARTIAL, EvidenceStrength.LOW],
+        ["MESSAGE", "Chat klub musik pukul 10.30: 'pialanya sudah di ruang musik buat dekorasi'.", EvidenceRelevance.RELEVANT, EvidenceStrength.MEDIUM],
+        ["DOCUMENT", "Jadwal acara mencatat ruang musik dipakai untuk latihan pukul 10.45.", EvidenceRelevance.RELEVANT, EvidenceStrength.HIGH],
+      ],
+      questions: [
+        {
+          skill: "DET-KRONOLOGI",
+          prompt: "Susun timeline paling aman dari perpindahan piala.",
+          expectedKeywords: ["10.05", "10.22", "10.24", "10.30", "urutan", "ruang musik"],
+          expectedReasoning:
+            "Timeline aman dimulai dari peminjaman kunci 10.05, pengembalian 10.22, foto koridor 10.24, lalu chat ruang musik 10.30.",
+        },
+        {
+          skill: "DET-SUMBER",
+          prompt: "Bukti mana yang paling kuat dan mana yang masih lemah?",
+          expectedKeywords: ["log", "jadwal", "kuat", "foto", "lemah", "saksi"],
+          expectedReasoning:
+            "Log kunci dan jadwal lebih kuat karena tercatat. Foto buram dan saksi membantu tetapi perlu verifikasi.",
+        },
+        {
+          skill: "DET-ETIKA",
+          prompt: "Tulis kesimpulan final yang adil tanpa menuduh berlebihan.",
+          expectedKeywords: ["belum cukup", "kemungkinan", "ruang musik", "cek", "adil", "tidak menuduh"],
+          expectedReasoning:
+            "Kesimpulan final harus menyebut piala kemungkinan dipindahkan untuk dekorasi ruang musik, tetapi tetap perlu cek izin dan siapa yang memindahkan.",
+        },
+      ],
+    },
+  ] as const;
+
+  for (const caseInput of additionalCaseMissions) {
+    const module = detectiveModulesBySlug.get(caseInput.moduleSlug);
+    const mission = await prisma.caseMission.upsert({
+      where: { id: caseInput.id },
+      update: {
+        curriculumModuleId: module?.id,
+        title: caseInput.title,
+        openingStory: caseInput.openingStory,
+        status: MissionStatus.ACTIVE,
+      },
+      create: {
+        id: caseInput.id,
+        worldId: world.id,
+        curriculumModuleId: module?.id,
+        title: caseInput.title,
+        openingStory: caseInput.openingStory,
+        estimatedMinutes: 18,
+        status: MissionStatus.ACTIVE,
+      },
+    });
+
+    for (const [index, [type, content, relevance, sourceStrength]] of caseInput.evidence.entries()) {
+      await prisma.caseEvidence.upsert({
+        where: {
+          caseMissionId_orderNumber: {
+            caseMissionId: mission.id,
+            orderNumber: index + 1,
+          },
+        },
+        update: { type, content, relevance, sourceStrength },
+        create: {
+          caseMissionId: mission.id,
+          orderNumber: index + 1,
+          type,
+          content,
+          relevance,
+          sourceStrength,
+        },
+      });
+    }
+
+    for (const [index, question] of caseInput.questions.entries()) {
+      await prisma.caseQuestion.upsert({
+        where: {
+          caseMissionId_orderNumber: {
+            caseMissionId: mission.id,
+            orderNumber: index + 1,
+          },
+        },
+        update: {
+          competencyId: skills[question.skill].id,
+          prompt: question.prompt,
+          expectedKeywords: [...question.expectedKeywords],
+          expectedReasoning: question.expectedReasoning,
+        },
+        create: {
+          caseMissionId: mission.id,
+          competencyId: skills[question.skill].id,
+          orderNumber: index + 1,
+          prompt: question.prompt,
+          expectedKeywords: [...question.expectedKeywords],
+          expectedReasoning: question.expectedReasoning,
+        },
+      });
+    }
   }
 }
 
