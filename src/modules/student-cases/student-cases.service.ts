@@ -20,6 +20,13 @@ import {
 const assignmentInclude = {
   caseMission: {
     include: {
+      curriculumModule: {
+        include: {
+          lessons: { orderBy: { orderNumber: "asc" as const } },
+          caseStudies: { orderBy: { orderNumber: "asc" as const } },
+          remedialRules: true,
+        },
+      },
       evidence: { orderBy: { orderNumber: "asc" as const } },
       questions: {
         orderBy: { orderNumber: "asc" as const },
@@ -36,7 +43,7 @@ type AssignmentWithCase = Prisma.CaseAssignmentGetPayload<{
   include: typeof assignmentInclude;
 }>;
 
-const detectiveLessonPlan = {
+const fallbackDetectiveLessonPlan = {
   title: "Modul 1: Observasi Bukti Seperti Detektif",
   simpleGoal:
     "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
@@ -412,6 +419,7 @@ export class StudentCasesService {
       };
     });
     const weakQuestions = questions.filter((question) => question.score < 60);
+    const remedialRule = assignment.caseMission.curriculumModule?.remedialRules[0];
 
     return {
       attemptId,
@@ -424,13 +432,14 @@ export class StudentCasesService {
         canRetakeSameCase: false,
         title:
           weakQuestions.length > 0
-            ? "Belajar ulang singkat, lalu tes berikutnya akan mengulang skill yang lemah."
+            ? (remedialRule?.recommendationTitle ??
+              "Belajar ulang singkat, lalu tes berikutnya akan mengulang skill yang lemah.")
             : "Bagus. Tes berikutnya naik ke kasus dengan bukti lebih banyak.",
         message:
           weakQuestions.length > 0
-            ? `Skill yang perlu diulang: ${weakQuestions
+            ? `${remedialRule?.recommendationMessage ?? "Sistem akan memberi kasus baru dengan pola mirip."} Skill yang perlu diulang: ${weakQuestions
                 .map((question) => question.skill.name)
-                .join(", ")}. Kamu tidak perlu mengulang kasus yang sama; sistem akan memberi kasus baru dengan pola mirip.`
+                .join(", ")}.`
             : "Kamu sudah cukup kuat di modul ini. Lanjut ke kronologi dan hubungan sebab-akibat.",
         focusSkills: weakQuestions.map((question) => question.skill.name),
       },
@@ -466,7 +475,7 @@ export class StudentCasesService {
         openingStory: assignment.caseMission.openingStory,
         estimatedMinutes: assignment.caseMission.estimatedMinutes,
       },
-      lessonPlan: detectiveLessonPlan,
+      lessonPlan: this.serializeLessonPlan(assignment),
       attempt: assignment.attempt
         ? { id: assignment.attempt.id, status: assignment.attempt.status }
         : null,
@@ -488,6 +497,54 @@ export class StudentCasesService {
         // jawaban dan hanya boleh terlihat setelah attempt disubmit.
         score: isSubmitted ? Number(answersByQuestionId.get(question.id)?.score ?? 0) : undefined,
       })),
+    };
+  }
+
+  private serializeLessonPlan(assignment: AssignmentWithCase) {
+    const module = assignment.caseMission.curriculumModule;
+    if (!module) return fallbackDetectiveLessonPlan;
+
+    const conceptLessons = module.lessons.filter((lesson) => lesson.type === "CONCEPT");
+    const habitLesson = module.lessons.find((lesson) => lesson.type === "PROFESSIONAL_HABIT");
+    const exampleLesson = module.lessons.find((lesson) => lesson.type === "EXAMPLE");
+    const checklistLesson = module.lessons.find((lesson) => lesson.type === "CHECKLIST");
+    const rubricLesson = module.lessons.find((lesson) => lesson.type === "RUBRIC");
+    const masteryPathLesson = module.lessons.find((lesson) => lesson.type === "MASTERY_PATH");
+
+    return {
+      title: module.title,
+      simpleGoal: module.simpleGoal,
+      bigIdea: module.bigIdea,
+      learnSteps: conceptLessons.map((lesson) => ({
+        title: lesson.title,
+        body: lesson.body,
+        example: lesson.examples[0],
+      })),
+      professionalHabits: habitLesson?.items ?? [],
+      caseStudies: module.caseStudies.map((caseStudy) => ({
+        title: caseStudy.title,
+        story: caseStudy.story,
+        analysisSteps: caseStudy.analysisSteps,
+        commonMistake: caseStudy.commonMistake,
+      })),
+      exampleCase: {
+        story: assignment.caseMission.openingStory,
+        goodAnswer: exampleLesson?.body ?? fallbackDetectiveLessonPlan.exampleCase.goodAnswer,
+        answerFormula: exampleLesson?.examples[0],
+        badAnswer: exampleLesson?.examples[1],
+      },
+      investigationChecklist: checklistLesson?.items ?? [],
+      testRubric: rubricLesson?.items ?? [],
+      masteryPath: {
+        currentModule: module.title,
+        nextModules: masteryPathLesson?.items ?? [],
+      },
+      testRules: [
+        "Baca materi dulu.",
+        "Pelajari studi kasus dan contoh jawaban.",
+        "Jawab tes dengan pola: bukti -> alasan -> kesimpulan.",
+        "Kalau skor belum cukup, skill lemah akan muncul lagi di tes berikutnya dengan kasus baru.",
+      ],
     };
   }
 

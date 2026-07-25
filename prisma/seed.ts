@@ -1,5 +1,7 @@
 import {
   ActivityType,
+  CurriculumLessonType,
+  CurriculumModuleStatus,
   EvidenceRelevance,
   EvidenceStrength,
   MissionStatus,
@@ -168,7 +170,7 @@ async function main() {
     ["MTK-6-PER", "Perbandingan", "Perbandingan senilai dan berbalik nilai"],
     ["MTK-6-DAT", "Pengolahan Data", "Membaca dan menafsirkan data"],
     ["MTK-6-BDG", "Bangun Datar", "Keliling dan luas bangun datar"],
-  ] as const;
+  ];
 
   const competencies = [];
   for (const [index, [code, name, description]] of competencyInputs.entries()) {
@@ -570,7 +572,7 @@ async function seedBaleDetective() {
     ["DET-KRONOLOGI", "Analisis Kronologi", "Menyusun urutan kejadian dan menemukan ketidaksesuaian waktu"],
     ["DET-SUMBER", "Evaluasi Sumber", "Membedakan sumber informasi yang kuat dan lemah"],
     ["DET-ETIKA", "Komunikasi dan Etika", "Bertanya secara netral dan mengambil keputusan bertanggung jawab"],
-  ] as const;
+  ];
 
   const skills: Record<string, Awaited<ReturnType<typeof prisma.competency.upsert>>> = {};
   for (const [index, [code, name, description]] of skillInputs.entries()) {
@@ -601,12 +603,258 @@ async function seedBaleDetective() {
     },
   });
 
+  const detectiveModule = await prisma.curriculumModule.upsert({
+    where: { worldId_slug: { worldId: world.id, slug: "observasi-bukti-dasar" } },
+    update: {
+      competencyId: skills["DET-OBSERVASI"].id,
+      title: "Modul 1: Observasi Bukti Seperti Detektif",
+      simpleGoal:
+        "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
+      bigIdea:
+        "Detektif profesional tidak mulai dari menuduh. Mereka mulai dari pertanyaan: apa yang benar-benar kita tahu, dari mana kita tahu, dan bukti apa yang masih kurang?",
+      status: CurriculumModuleStatus.ACTIVE,
+    },
+    create: {
+      worldId: world.id,
+      competencyId: skills["DET-OBSERVASI"].id,
+      slug: "observasi-bukti-dasar",
+      title: "Modul 1: Observasi Bukti Seperti Detektif",
+      simpleGoal:
+        "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
+      bigIdea:
+        "Detektif profesional tidak mulai dari menuduh. Mereka mulai dari pertanyaan: apa yang benar-benar kita tahu, dari mana kita tahu, dan bukti apa yang masih kurang?",
+      orderNumber: 1,
+      estimatedMinutes: 25,
+      status: CurriculumModuleStatus.ACTIVE,
+    },
+  });
+
+  const lessonInputs = [
+    {
+      type: CurriculumLessonType.CONCEPT,
+      title: "Fakta",
+      body: "Fakta adalah informasi yang bisa dicek. Contoh: jadwal ruangan, catatan login, waktu file disimpan, isi pesan, atau rekaman kamera.",
+      examples: [
+        "Catatan login komputer: Budi login pukul 13.32. Ini fakta karena berasal dari sistem dan waktunya jelas.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.CONCEPT,
+      title: "Asumsi",
+      body: "Asumsi adalah dugaan yang belum cukup bukti. Asumsi boleh dicatat sebagai kemungkinan, tetapi belum boleh dipakai untuk menuduh.",
+      examples: [
+        "Meja berantakan berarti pelakunya panik. Ini masih asumsi karena meja berantakan bisa terjadi karena banyak sebab.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.CONCEPT,
+      title: "Pengecoh",
+      body: "Pengecoh adalah detail yang terlihat menarik, tetapi tidak langsung membantu menjawab pertanyaan utama.",
+      examples: [
+        "Warna tas seseorang mungkin terlihat mencolok, tetapi tidak relevan jika kasusnya tentang waktu file terakhir disimpan.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.CONCEPT,
+      title: "Sumber kuat dan sumber lemah",
+      body: "Sumber kuat biasanya otomatis, tercatat, atau bisa diverifikasi. Sumber lemah biasanya hanya ingatan, kesan, atau cerita satu orang.",
+      examples: [
+        "Log komputer lebih kuat daripada pernyataan 'seingatku dia lama di ruangan', karena log punya waktu yang spesifik.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.CONCEPT,
+      title: "Kronologi",
+      body: "Kronologi adalah urutan kejadian. Detektif menyusun waktu untuk melihat siapa yang punya kesempatan, apa yang berubah, dan bagian mana yang belum jelas.",
+      examples: [
+        "Jika file masih ada pukul 15.20 tetapi hilang pukul 15.45, maka fokus investigasi berada di rentang 15.20-15.45.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.CONCEPT,
+      title: "Kesimpulan sementara",
+      body: "Kesimpulan sementara harus menyebut bukti pendukung dan bagian yang belum pasti. Detektif yang baik berani berkata 'bukti belum cukup'.",
+      examples: [
+        "Kesimpulan aman: file kemungkinan berubah setelah pukul 15.20, tetapi belum cukup bukti untuk menuduh satu orang.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.PROFESSIONAL_HABIT,
+      title: "Kebiasaan detektif profesional",
+      body: "Kebiasaan ini dipakai setiap kali kamu membaca kasus.",
+      examples: [],
+      items: [
+        "Tulis bukti apa adanya sebelum membuat dugaan.",
+        "Pisahkan fakta, asumsi, dan pertanyaan yang belum terjawab.",
+        "Cari lebih dari satu sumber sebelum percaya pada kesimpulan.",
+        "Jangan menuduh orang jika bukti belum cukup.",
+        "Saat menjawab, gunakan pola: bukti -> alasan -> kesimpulan.",
+      ],
+    },
+    {
+      type: CurriculumLessonType.EXAMPLE,
+      title: "Contoh jawaban lengkap",
+      body: "Bukti terkuat adalah riwayat file pukul 15.20 dan waktu pengecekan pukul 15.45. Dedi memang berada di ruangan pada rentang itu, tetapi itu belum cukup untuk menuduh. Kemungkinan yang perlu dicek: file dipindahkan, berubah nama, terhapus tidak sengaja, atau disimpan di folder lain.",
+      examples: [
+        "Rumus jawaban: Bukti yang kupakai adalah ... Maka kemungkinan ... Namun belum pasti karena ... Jadi langkah berikutnya ...",
+        "Hindari: Dedi pasti pelakunya karena dia orang terakhir di ruangan.",
+      ],
+      items: [],
+    },
+    {
+      type: CurriculumLessonType.CHECKLIST,
+      title: "Checklist sebelum tes",
+      body: "Gunakan checklist ini sebelum menulis kesimpulan.",
+      examples: [],
+      items: [
+        "Apa pertanyaan utama kasus ini?",
+        "Bukti mana yang paling kuat?",
+        "Bukti mana yang hanya sebagian membantu?",
+        "Detail mana yang mungkin pengecoh?",
+        "Apa minimal dua kemungkinan penjelasan?",
+        "Bukti apa yang masih perlu dicari?",
+        "Apakah kesimpulanku sudah adil dan tidak menuduh tanpa dasar?",
+      ],
+    },
+    {
+      type: CurriculumLessonType.RUBRIC,
+      title: "Jawabanmu dinilai dari",
+      body: "Rubrik ini membuat tes terasa adil dan jelas.",
+      examples: [],
+      items: [
+        "Jawaban menyebut bukti spesifik.",
+        "Jawaban membedakan fakta dan asumsi.",
+        "Jawaban memberi alasan, bukan hanya kesimpulan.",
+        "Jawaban menyebut informasi yang masih perlu diverifikasi.",
+        "Jawaban tidak menuduh tanpa bukti kuat.",
+      ],
+    },
+    {
+      type: CurriculumLessonType.MASTERY_PATH,
+      title: "Jalur mastery berikutnya",
+      body: "Setelah observasi bukti, kamu akan naik ke kemampuan detektif yang lebih sulit.",
+      examples: [],
+      items: [
+        "Kronologi kejadian",
+        "Logika hipotesis",
+        "Wawancara saksi",
+        "Verifikasi sumber",
+        "Etika laporan investigasi",
+        "Kasus besar lintas bukti",
+      ],
+    },
+  ];
+
+  for (const [index, lesson] of lessonInputs.entries()) {
+    await prisma.curriculumLesson.upsert({
+      where: {
+        moduleId_orderNumber: {
+          moduleId: detectiveModule.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: lesson,
+      create: {
+        moduleId: detectiveModule.id,
+        orderNumber: index + 1,
+        ...lesson,
+      },
+    });
+  }
+
+  const caseStudyInputs = [
+    {
+      title: "Studi Kasus A: Kunci kelas hilang",
+      story:
+        "Pukul 07.10 kamera mencatat pintu kelas terbuka. Pukul 07.20 wali kelas masuk dan kunci cadangan tidak ada. Satu siswa melihat meja guru berantakan, tetapi tidak melihat siapa pun mengambil kunci.",
+      analysisSteps: [
+        "Fakta kuat: kamera mencatat pintu terbuka pukul 07.10.",
+        "Fakta kuat: kunci belum ada saat wali kelas masuk pukul 07.20.",
+        "Petunjuk lemah: meja berantakan, karena belum jelas penyebabnya.",
+        "Kesimpulan aman: kejadian kemungkinan terjadi antara 07.10-07.20, tetapi pelaku belum bisa ditentukan.",
+      ],
+      commonMistake:
+        "Langsung menuduh siswa yang pertama datang. Itu belum adil karena belum ada bukti dia mengambil kunci.",
+    },
+    {
+      title: "Studi Kasus B: File presentasi hilang",
+      story:
+        "Empat siswa memakai komputer bersama. Log menunjukkan file terakhir disimpan pukul 15.20. Pukul 15.45 file tidak ditemukan. Salah satu siswa menulis di grup bahwa file terlihat aneh dan ia menyimpan ulang pukul 14.30.",
+      analysisSteps: [
+        "Fakta kuat: file masih tercatat disimpan pukul 15.20.",
+        "Fakta kuat: file tidak ditemukan pukul 15.45.",
+        "Petunjuk sedang: pesan grup pukul 14.30 menunjukkan ada masalah file sebelumnya.",
+        "Pertanyaan lanjutan: apakah file terhapus, dipindahkan folder, atau berubah nama setelah 15.20?",
+      ],
+      commonMistake:
+        "Menganggap siswa yang menulis pesan pukul 14.30 pasti pelakunya. Padahal file masih tersimpan pukul 15.20.",
+    },
+    {
+      title: "Studi Kasus C: Botol minum tertukar",
+      story:
+        "Dua botol minum mirip tertinggal di lapangan. Satu botol punya stiker kecil, satu lagi tidak. Tiga siswa mengaku membawa botol warna sama, tetapi hanya satu yang menyebut ada stiker.",
+      analysisSteps: [
+        "Fakta pembeda: stiker kecil di salah satu botol.",
+        "Sumber yang perlu dicek: pernyataan siswa dan ciri fisik botol.",
+        "Kesimpulan aman: pemilik paling mungkin adalah siswa yang bisa menyebut ciri unik, tetapi tetap perlu konfirmasi.",
+      ],
+      commonMistake:
+        "Memilih pemilik hanya dari warna botol. Warna saja lemah karena ada lebih dari satu botol yang mirip.",
+    },
+  ];
+
+  for (const [index, caseStudy] of caseStudyInputs.entries()) {
+    await prisma.curriculumCaseStudy.upsert({
+      where: {
+        moduleId_orderNumber: {
+          moduleId: detectiveModule.id,
+          orderNumber: index + 1,
+        },
+      },
+      update: caseStudy,
+      create: {
+        moduleId: detectiveModule.id,
+        orderNumber: index + 1,
+        ...caseStudy,
+      },
+    });
+  }
+
+  await prisma.remedialRule.upsert({
+    where: { id: "00000000-0000-0000-0000-000000000101" },
+    update: {
+      moduleId: detectiveModule.id,
+      competencyId: skills["DET-OBSERVASI"].id,
+      recommendationTitle:
+        "Belajar ulang singkat, lalu tes berikutnya akan mengulang skill yang lemah.",
+      recommendationMessage:
+        "Kamu tidak perlu mengulang kasus yang sama. Sistem akan memberi kasus baru dengan pola mirip agar kamu benar-benar paham, bukan menghafal jawaban.",
+    },
+    create: {
+      id: "00000000-0000-0000-0000-000000000101",
+      moduleId: detectiveModule.id,
+      competencyId: skills["DET-OBSERVASI"].id,
+      minScoreExclusive: 60,
+      recommendationTitle:
+        "Belajar ulang singkat, lalu tes berikutnya akan mengulang skill yang lemah.",
+      recommendationMessage:
+        "Kamu tidak perlu mengulang kasus yang sama. Sistem akan memberi kasus baru dengan pola mirip agar kamu benar-benar paham, bukan menghafal jawaban.",
+    },
+  });
+
   const caseMission = await prisma.caseMission.upsert({
     where: { id: "00000000-0000-0000-0000-000000000002" },
-    update: {},
+    update: { curriculumModuleId: detectiveModule.id },
     create: {
       id: "00000000-0000-0000-0000-000000000002",
       worldId: world.id,
+      curriculumModuleId: detectiveModule.id,
       title: "Misteri Dokumen Presentasi",
       openingStory:
         "Setelah kegiatan sekolah, file presentasi tim tidak ditemukan di komputer bersama. Empat orang menggunakan ruangan pada waktu berbeda. Kamu ditugaskan menyelidiki apa yang sebenarnya terjadi - tanpa langsung menuduh siapa pun.",

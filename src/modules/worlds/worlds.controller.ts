@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { UserRole } from "@prisma/client";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -21,5 +21,11 @@ export class WorldsController {
   @ResponseMessage("Daftar dunia berhasil diambil.")
   findAll(@CurrentUser() currentUser: AuthenticatedUser) {
     return this.worldsService.findAllForStudent(currentUser);
+  }
+
+  @Get(":worldKey/curriculum")
+  @ResponseMessage("Kurikulum dunia berhasil diambil.")
+  findCurriculum(@Param("worldKey") worldKey: string) {
+    return this.worldsService.findCurriculumByWorldKey(worldKey);
   }
 }

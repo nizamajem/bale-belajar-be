@@ -132,6 +132,21 @@ enum GuardrailStatus {
   FALLBACK
 }
 
+enum CurriculumModuleStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum CurriculumLessonType {
+  CONCEPT
+  PROFESSIONAL_HABIT
+  EXAMPLE
+  CHECKLIST
+  RUBRIC
+  MASTERY_PATH
+}
+
 enum CareerPath {
   DETECTIVE
   ANIMAL_DOCTOR
@@ -340,6 +355,8 @@ model Competency {
   competencyResults CompetencyResult[]
   recommendations LearningRecommendation[]
   missions      Mission[]
+  curriculumModules CurriculumModule[]
+  remedialRules RemedialRule[]
   masteryStates MasteryState[]
   masteryEvents MasteryEvent[]
   caseQuestions CaseQuestion[]
@@ -666,6 +683,7 @@ model World {
   experienceEntries   ExperienceLedgerEntry[]
   missions            Mission[]
   missionAssignments  DailyMissionAssignment[]
+  curriculumModules   CurriculumModule[]
   caseMissions        CaseMission[]
   caseAssignments     CaseAssignment[]
 
@@ -890,6 +908,91 @@ model AiInteractionLog {
 }
 
 // =========================================================================
+// Curriculum engine. Struktur ini dipakai untuk semua dunia karier:
+// Detectivia sekarang menjadi pilot/template. Dunia lain seperti dokter,
+// guru, programmer, dan matematika tinggal membuat CurriculumModule dengan
+// lesson, studi kasus, dan remedial rule masing-masing.
+// =========================================================================
+
+model CurriculumModule {
+  id               String                 @id @default(uuid()) @db.Uuid
+  worldId          String                 @db.Uuid
+  competencyId     String?                @db.Uuid
+  slug             String
+  title            String
+  simpleGoal       String
+  bigIdea          String?
+  orderNumber      Int
+  estimatedMinutes Int                    @default(20)
+  status           CurriculumModuleStatus @default(DRAFT)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  world         World                 @relation(fields: [worldId], references: [id])
+  competency    Competency?           @relation(fields: [competencyId], references: [id])
+  lessons       CurriculumLesson[]
+  caseStudies   CurriculumCaseStudy[]
+  remedialRules RemedialRule[]
+  caseMissions  CaseMission[]
+
+  @@unique([worldId, slug])
+  @@unique([worldId, orderNumber])
+  @@index([competencyId])
+  @@index([status])
+}
+
+model CurriculumLesson {
+  id        String               @id @default(uuid()) @db.Uuid
+  moduleId  String               @db.Uuid
+  type      CurriculumLessonType
+  orderNumber Int
+  title     String
+  body      String
+  examples  String[]
+  items     String[]
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  module CurriculumModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([moduleId, orderNumber])
+  @@index([type])
+}
+
+model CurriculumCaseStudy {
+  id            String   @id @default(uuid()) @db.Uuid
+  moduleId      String   @db.Uuid
+  orderNumber   Int
+  title         String
+  story         String
+  analysisSteps String[]
+  commonMistake String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  module CurriculumModule @relation(fields: [moduleId], references: [id])
+
+  @@unique([moduleId, orderNumber])
+}
+
+model RemedialRule {
+  id                    String   @id @default(uuid()) @db.Uuid
+  moduleId              String   @db.Uuid
+  competencyId          String?  @db.Uuid
+  minScoreExclusive     Int      @default(60)
+  recommendationTitle   String
+  recommendationMessage String
+  actionType            String   @default("NEXT_SIMILAR_CASE")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  module     CurriculumModule @relation(fields: [moduleId], references: [id])
+  competency Competency?      @relation(fields: [competencyId], references: [id])
+
+  @@index([competencyId])
+}
+
+// =========================================================================
 // BaleDetective: Case Mission (evidence-based investigation missions).
 // Bentuknya beda dari Mission/Activity (pilihan ganda) di Numeria - di sini
 // siswa membaca bukti, menjawab pertanyaan penalaran secara bebas teks, dan
@@ -900,6 +1003,7 @@ model AiInteractionLog {
 model CaseMission {
   id               String        @id @default(uuid()) @db.Uuid
   worldId          String        @db.Uuid
+  curriculumModuleId String?     @db.Uuid
   title            String
   openingStory     String
   estimatedMinutes Int           @default(20)
@@ -908,12 +1012,14 @@ model CaseMission {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  world       World            @relation(fields: [worldId], references: [id])
-  evidence    CaseEvidence[]
-  questions   CaseQuestion[]
-  assignments CaseAssignment[]
+  world            World             @relation(fields: [worldId], references: [id])
+  curriculumModule CurriculumModule? @relation(fields: [curriculumModuleId], references: [id])
+  evidence         CaseEvidence[]
+  questions        CaseQuestion[]
+  assignments      CaseAssignment[]
 
   @@index([worldId])
+  @@index([curriculumModuleId])
   @@index([status])
 }
 
