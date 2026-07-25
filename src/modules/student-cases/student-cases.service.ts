@@ -37,31 +37,137 @@ type AssignmentWithCase = Prisma.CaseAssignmentGetPayload<{
 }>;
 
 const detectiveLessonPlan = {
-  title: "Observasi Bukti Dasar",
-  simpleGoal: "Kamu belajar membedakan fakta, asumsi, dan petunjuk pengecoh sebelum menjawab kasus.",
+  title: "Modul 1: Observasi Bukti Seperti Detektif",
+  simpleGoal:
+    "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
+  bigIdea:
+    "Detektif profesional tidak mulai dari menuduh. Mereka mulai dari pertanyaan: apa yang benar-benar kita tahu, dari mana kita tahu, dan bukti apa yang masih kurang?",
   learnSteps: [
     {
       title: "Fakta",
-      body: "Fakta adalah informasi yang bisa dicek. Contoh: waktu, tempat, catatan kamera, atau isi pesan.",
+      body: "Fakta adalah informasi yang bisa dicek. Contoh: jadwal ruangan, catatan login, waktu file disimpan, isi pesan, atau rekaman kamera.",
+      example:
+        "Catatan login komputer: Budi login pukul 13.32. Ini fakta karena berasal dari sistem dan waktunya jelas.",
     },
     {
       title: "Asumsi",
-      body: "Asumsi adalah dugaan. Dugaan boleh dicatat, tapi belum boleh jadi kesimpulan.",
+      body: "Asumsi adalah dugaan yang belum cukup bukti. Asumsi boleh dicatat sebagai kemungkinan, tetapi belum boleh dipakai untuk menuduh.",
+      example:
+        "Meja berantakan berarti pelakunya panik. Ini masih asumsi karena meja berantakan bisa terjadi karena banyak sebab.",
     },
     {
       title: "Pengecoh",
-      body: "Pengecoh terlihat menarik, tetapi tidak membantu menjawab pertanyaan utama.",
+      body: "Pengecoh adalah detail yang terlihat menarik, tetapi tidak langsung membantu menjawab pertanyaan utama.",
+      example:
+        "Warna tas seseorang mungkin terlihat mencolok, tetapi tidak relevan jika kasusnya tentang waktu file terakhir disimpan.",
+    },
+    {
+      title: "Sumber kuat dan sumber lemah",
+      body: "Sumber kuat biasanya otomatis, tercatat, atau bisa diverifikasi. Sumber lemah biasanya hanya ingatan, kesan, atau cerita satu orang.",
+      example:
+        "Log komputer lebih kuat daripada pernyataan 'seingatku dia lama di ruangan', karena log punya waktu yang spesifik.",
+    },
+    {
+      title: "Kronologi",
+      body: "Kronologi adalah urutan kejadian. Detektif menyusun waktu untuk melihat siapa yang punya kesempatan, apa yang berubah, dan bagian mana yang belum jelas.",
+      example:
+        "Jika file masih ada pukul 15.20 tetapi hilang pukul 15.45, maka fokus investigasi berada di rentang 15.20-15.45.",
+    },
+    {
+      title: "Kesimpulan sementara",
+      body: "Kesimpulan sementara harus menyebut bukti pendukung dan bagian yang belum pasti. Detektif yang baik berani berkata 'bukti belum cukup'.",
+      example:
+        "Kesimpulan aman: file kemungkinan berubah setelah pukul 15.20, tetapi belum cukup bukti untuk menuduh satu orang.",
+    },
+  ],
+  professionalHabits: [
+    "Tulis bukti apa adanya sebelum membuat dugaan.",
+    "Pisahkan fakta, asumsi, dan pertanyaan yang belum terjawab.",
+    "Cari lebih dari satu sumber sebelum percaya pada kesimpulan.",
+    "Jangan menuduh orang jika bukti belum cukup.",
+    "Saat menjawab, gunakan pola: bukti -> alasan -> kesimpulan.",
+  ],
+  caseStudies: [
+    {
+      title: "Studi Kasus A: Kunci kelas hilang",
+      story:
+        "Pukul 07.10 kamera mencatat pintu kelas terbuka. Pukul 07.20 wali kelas masuk dan kunci cadangan tidak ada. Satu siswa melihat meja guru berantakan, tetapi tidak melihat siapa pun mengambil kunci.",
+      analysisSteps: [
+        "Fakta kuat: kamera mencatat pintu terbuka pukul 07.10.",
+        "Fakta kuat: kunci belum ada saat wali kelas masuk pukul 07.20.",
+        "Petunjuk lemah: meja berantakan, karena belum jelas penyebabnya.",
+        "Kesimpulan aman: kejadian kemungkinan terjadi antara 07.10-07.20, tetapi pelaku belum bisa ditentukan.",
+      ],
+      commonMistake:
+        "Langsung menuduh siswa yang pertama datang. Itu belum adil karena belum ada bukti dia mengambil kunci.",
+    },
+    {
+      title: "Studi Kasus B: File presentasi hilang",
+      story:
+        "Empat siswa memakai komputer bersama. Log menunjukkan file terakhir disimpan pukul 15.20. Pukul 15.45 file tidak ditemukan. Salah satu siswa menulis di grup bahwa file terlihat aneh dan ia menyimpan ulang pukul 14.30.",
+      analysisSteps: [
+        "Fakta kuat: file masih tercatat disimpan pukul 15.20.",
+        "Fakta kuat: file tidak ditemukan pukul 15.45.",
+        "Petunjuk sedang: pesan grup pukul 14.30 menunjukkan ada masalah file sebelumnya.",
+        "Pertanyaan lanjutan: apakah file terhapus, dipindahkan folder, atau berubah nama setelah 15.20?",
+      ],
+      commonMistake:
+        "Menganggap siswa yang menulis pesan pukul 14.30 pasti pelakunya. Padahal file masih tersimpan pukul 15.20.",
+    },
+    {
+      title: "Studi Kasus C: Botol minum tertukar",
+      story:
+        "Dua botol minum mirip tertinggal di lapangan. Satu botol punya stiker kecil, satu lagi tidak. Tiga siswa mengaku membawa botol warna sama, tetapi hanya satu yang menyebut ada stiker.",
+      analysisSteps: [
+        "Fakta pembeda: stiker kecil di salah satu botol.",
+        "Sumber yang perlu dicek: pernyataan siswa dan ciri fisik botol.",
+        "Kesimpulan aman: pemilik paling mungkin adalah siswa yang bisa menyebut ciri unik, tetapi tetap perlu konfirmasi.",
+      ],
+      commonMistake:
+        "Memilih pemilik hanya dari warna botol. Warna saja lemah karena ada lebih dari satu botol yang mirip.",
     },
   ],
   exampleCase: {
-    story: "Kunci kelas hilang. Kamera mencatat pintu terbuka pukul 07.10. Seorang siswa bilang melihat meja berantakan, tapi tidak melihat siapa yang mengambil kunci.",
-    goodAnswer: "Catatan kamera adalah fakta kuat. Meja berantakan adalah petunjuk tambahan. Menuduh seseorang tanpa bukti masih asumsi.",
+    story:
+      "File presentasi hilang. Jadwal menunjukkan Dedi memakai ruangan pukul 15.00-15.45. Riwayat file menunjukkan file terakhir disimpan pukul 15.20 dan hilang saat dicek pukul 15.45.",
+    goodAnswer:
+      "Bukti terkuat adalah riwayat file pukul 15.20 dan waktu pengecekan pukul 15.45. Dedi memang berada di ruangan pada rentang itu, tetapi itu belum cukup untuk menuduh. Kemungkinan yang perlu dicek: file dipindahkan, berubah nama, terhapus tidak sengaja, atau disimpan di folder lain.",
+    answerFormula: "Bukti yang kupakai adalah ... Maka kemungkinan ... Namun belum pasti karena ... Jadi langkah berikutnya ...",
+    badAnswer:
+      "Dedi pasti pelakunya karena dia orang terakhir di ruangan. Ini buruk karena langsung menuduh tanpa mengecek kemungkinan lain.",
+  },
+  investigationChecklist: [
+    "Apa pertanyaan utama kasus ini?",
+    "Bukti mana yang paling kuat?",
+    "Bukti mana yang hanya sebagian membantu?",
+    "Detail mana yang mungkin pengecoh?",
+    "Apa minimal dua kemungkinan penjelasan?",
+    "Bukti apa yang masih perlu dicari?",
+    "Apakah kesimpulanku sudah adil dan tidak menuduh tanpa dasar?",
+  ],
+  testRubric: [
+    "Jawaban menyebut bukti spesifik.",
+    "Jawaban membedakan fakta dan asumsi.",
+    "Jawaban memberi alasan, bukan hanya kesimpulan.",
+    "Jawaban menyebut informasi yang masih perlu diverifikasi.",
+    "Jawaban tidak menuduh tanpa bukti kuat.",
+  ],
+  masteryPath: {
+    currentModule: "Observasi Bukti",
+    nextModules: [
+      "Kronologi kejadian",
+      "Logika hipotesis",
+      "Wawancara saksi",
+      "Verifikasi sumber",
+      "Etika laporan investigasi",
+      "Kasus besar lintas bukti",
+    ],
   },
   testRules: [
     "Baca materi dulu.",
-    "Lihat contoh cara menjawab.",
-    "Jawab tes dengan alasan, bukan tebakan.",
-    "Kalau skor belum cukup, skill itu muncul lagi di tes berikutnya dengan kasus baru.",
+    "Pelajari studi kasus dan contoh jawaban.",
+    "Jawab tes dengan pola: bukti -> alasan -> kesimpulan.",
+    "Kalau skor belum cukup, skill lemah akan muncul lagi di tes berikutnya dengan kasus baru.",
   ],
 };
 
