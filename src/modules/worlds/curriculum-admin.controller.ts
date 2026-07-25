@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { UserRole } from "@prisma/client";
 import { ResponseMessage } from "../../common/decorators/response-message.decorator";
@@ -14,6 +14,30 @@ type CurriculumModulePayload = {
   simpleGoal?: string;
   slug?: string;
   title?: string;
+};
+
+type CurriculumLessonPayload = {
+  body?: string;
+  examples?: string[];
+  items?: string[];
+  orderNumber?: number;
+  title?: string;
+  type?: string;
+};
+
+type CurriculumCaseStudyPayload = {
+  analysisSteps?: string[];
+  commonMistake?: string;
+  orderNumber?: number;
+  story?: string;
+  title?: string;
+};
+
+type RemedialRulePayload = {
+  actionType?: string;
+  minScoreExclusive?: number;
+  recommendationMessage?: string;
+  recommendationTitle?: string;
 };
 
 @ApiTags("Admin Curriculum")
@@ -40,5 +64,53 @@ export class CurriculumAdminController {
   @ResponseMessage("Modul kurikulum berhasil diperbarui.")
   updateModule(@Param("moduleId") moduleId: string, @Body() body: CurriculumModulePayload) {
     return this.worldsService.updateCurriculumModule(moduleId, body);
+  }
+
+  @Post("modules/:moduleId/lessons")
+  @ResponseMessage("Materi kurikulum berhasil dibuat.")
+  createLesson(@Param("moduleId") moduleId: string, @Body() body: CurriculumLessonPayload) {
+    return this.worldsService.createCurriculumLesson(moduleId, body);
+  }
+
+  @Patch("lessons/:lessonId")
+  @ResponseMessage("Materi kurikulum berhasil diperbarui.")
+  updateLesson(@Param("lessonId") lessonId: string, @Body() body: CurriculumLessonPayload) {
+    return this.worldsService.updateCurriculumLesson(lessonId, body);
+  }
+
+  @Delete("lessons/:lessonId")
+  @ResponseMessage("Materi kurikulum berhasil dihapus.")
+  deleteLesson(@Param("lessonId") lessonId: string) {
+    return this.worldsService.deleteCurriculumLesson(lessonId);
+  }
+
+  @Post("modules/:moduleId/case-studies")
+  @ResponseMessage("Studi kasus berhasil dibuat.")
+  createCaseStudy(@Param("moduleId") moduleId: string, @Body() body: CurriculumCaseStudyPayload) {
+    return this.worldsService.createCurriculumCaseStudy(moduleId, body);
+  }
+
+  @Patch("case-studies/:caseStudyId")
+  @ResponseMessage("Studi kasus berhasil diperbarui.")
+  updateCaseStudy(@Param("caseStudyId") caseStudyId: string, @Body() body: CurriculumCaseStudyPayload) {
+    return this.worldsService.updateCurriculumCaseStudy(caseStudyId, body);
+  }
+
+  @Delete("case-studies/:caseStudyId")
+  @ResponseMessage("Studi kasus berhasil dihapus.")
+  deleteCaseStudy(@Param("caseStudyId") caseStudyId: string) {
+    return this.worldsService.deleteCurriculumCaseStudy(caseStudyId);
+  }
+
+  @Post("modules/:moduleId/remedial-rules")
+  @ResponseMessage("Aturan remedial berhasil dibuat.")
+  createRemedialRule(@Param("moduleId") moduleId: string, @Body() body: RemedialRulePayload) {
+    return this.worldsService.createRemedialRule(moduleId, body);
+  }
+
+  @Patch("remedial-rules/:ruleId")
+  @ResponseMessage("Aturan remedial berhasil diperbarui.")
+  updateRemedialRule(@Param("ruleId") ruleId: string, @Body() body: RemedialRulePayload) {
+    return this.worldsService.updateRemedialRule(ruleId, body);
   }
 }

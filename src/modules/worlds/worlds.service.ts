@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { CurriculumLessonType } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
 
@@ -9,6 +10,30 @@ type CurriculumModuleInput = {
   simpleGoal?: string;
   slug?: string;
   title?: string;
+};
+
+type CurriculumLessonInput = {
+  body?: string;
+  examples?: string[];
+  items?: string[];
+  orderNumber?: number;
+  title?: string;
+  type?: string;
+};
+
+type CurriculumCaseStudyInput = {
+  analysisSteps?: string[];
+  commonMistake?: string;
+  orderNumber?: number;
+  story?: string;
+  title?: string;
+};
+
+type RemedialRuleInput = {
+  actionType?: string;
+  minScoreExclusive?: number;
+  recommendationMessage?: string;
+  recommendationTitle?: string;
 };
 
 @Injectable()
@@ -123,6 +148,63 @@ export class WorldsService {
     };
   }
 
+  async findAdaptivePlan(currentUser: AuthenticatedUser, worldKey: string) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    const curriculum = await this.findCurriculumByWorldKey(worldKey);
+    const competencyIds = curriculum.modules
+      .map((module) => module.competency?.id)
+      .filter((id): id is string => Boolean(id));
+    const masteryStates = await this.prisma.masteryState.findMany({
+      where: { studentProfileId, competencyId: { in: competencyIds } },
+      include: { competency: { select: { id: true, code: true, name: true } } },
+    });
+    const masteryByCompetency = new Map(
+      masteryStates.map((state) => [state.competencyId, state]),
+    );
+    const firstModule = curriculum.modules[0] ?? null;
+    const weakModule = curriculum.modules.find((module) => {
+      if (!module.competency) return false;
+      const mastery = masteryByCompetency.get(module.competency.id);
+      if (!mastery) return true;
+      return Number(mastery.masteryScore) < 60 || mastery.status === "NEEDS_PRACTICE";
+    });
+    const targetModule = weakModule ?? firstModule;
+    const targetMastery = targetModule?.competency
+      ? masteryByCompetency.get(targetModule.competency.id)
+      : null;
+    const needsRemedial = Boolean(
+      targetMastery &&
+        (Number(targetMastery.masteryScore) < 60 || targetMastery.status === "NEEDS_PRACTICE"),
+    );
+
+    return {
+      world: {
+        key: curriculum.key,
+        name: curriculum.name,
+        characterClass: curriculum.characterClass,
+      },
+      nextAction: needsRemedial ? "REMEDIAL" : targetMastery ? "NEXT_MODULE" : "START_MODULE",
+      title: needsRemedial
+        ? "Ulangi bagian yang belum kuat"
+        : targetMastery
+          ? "Lanjut ke tantangan berikutnya"
+          : "Mulai dari materi pertama",
+      message: needsRemedial
+        ? "Sistem akan memberi materi singkat dan kasus baru dengan pola mirip."
+        : "Belajar materi, lihat studi kasus, lalu kerjakan tes.",
+      targetModule,
+      mastery: targetMastery
+        ? {
+            competency: targetMastery.competency,
+            masteryScore: Number(targetMastery.masteryScore),
+            status: targetMastery.status,
+            confidence: targetMastery.confidence,
+            evidenceCount: targetMastery.evidenceCount,
+          }
+        : null,
+    };
+  }
+
   async createCurriculumModule(worldKey: string, input: CurriculumModuleInput) {
     const world = await this.prisma.world.findUnique({ where: { key: worldKey } });
     if (!world || !world.isActive) {
@@ -160,6 +242,122 @@ export class WorldsService {
         title: input.title,
       },
     });
+  }
+
+  async createCurriculumLesson(moduleId: string, input: CurriculumLessonInput) {
+    await this.ensureCurriculumModule(moduleId);
+    const orderNumber =
+      input.orderNumber ??
+      ((await this.prisma.curriculumLesson.count({ where: { moduleId } })) + 1);
+
+    return this.prisma.curriculumLesson.create({
+      data: {
+        moduleId,
+        orderNumber,
+        type: this.parseLessonType(input.type),
+        title: input.title?.trim() || "Materi Baru",
+        body: input.body?.trim() || "Isi materi belum diisi.",
+        examples: input.examples ?? [],
+        items: input.items ?? [],
+      },
+    });
+  }
+
+  async updateCurriculumLesson(lessonId: string, input: CurriculumLessonInput) {
+    return this.prisma.curriculumLesson.update({
+      where: { id: lessonId },
+      data: {
+        body: input.body,
+        examples: input.examples,
+        items: input.items,
+        orderNumber: input.orderNumber,
+        title: input.title,
+        type: input.type ? this.parseLessonType(input.type) : undefined,
+      },
+    });
+  }
+
+  async deleteCurriculumLesson(lessonId: string) {
+    return this.prisma.curriculumLesson.delete({ where: { id: lessonId } });
+  }
+
+  async createCurriculumCaseStudy(moduleId: string, input: CurriculumCaseStudyInput) {
+    await this.ensureCurriculumModule(moduleId);
+    const orderNumber =
+      input.orderNumber ??
+      ((await this.prisma.curriculumCaseStudy.count({ where: { moduleId } })) + 1);
+
+    return this.prisma.curriculumCaseStudy.create({
+      data: {
+        moduleId,
+        orderNumber,
+        title: input.title?.trim() || "Studi Kasus Baru",
+        story: input.story?.trim() || "Cerita kasus belum diisi.",
+        analysisSteps: input.analysisSteps ?? [],
+        commonMistake: input.commonMistake?.trim() || "Kesalahan umum belum diisi.",
+      },
+    });
+  }
+
+  async updateCurriculumCaseStudy(caseStudyId: string, input: CurriculumCaseStudyInput) {
+    return this.prisma.curriculumCaseStudy.update({
+      where: { id: caseStudyId },
+      data: {
+        analysisSteps: input.analysisSteps,
+        commonMistake: input.commonMistake,
+        orderNumber: input.orderNumber,
+        story: input.story,
+        title: input.title,
+      },
+    });
+  }
+
+  async deleteCurriculumCaseStudy(caseStudyId: string) {
+    return this.prisma.curriculumCaseStudy.delete({ where: { id: caseStudyId } });
+  }
+
+  async createRemedialRule(moduleId: string, input: RemedialRuleInput) {
+    await this.ensureCurriculumModule(moduleId);
+
+    return this.prisma.remedialRule.create({
+      data: {
+        moduleId,
+        minScoreExclusive: input.minScoreExclusive ?? 60,
+        recommendationTitle:
+          input.recommendationTitle?.trim() || "Belajar ulang singkat.",
+        recommendationMessage:
+          input.recommendationMessage?.trim() ||
+          "Skill ini akan muncul lagi di tes berikutnya dengan kasus baru.",
+        actionType: input.actionType?.trim() || "NEXT_SIMILAR_CASE",
+      },
+    });
+  }
+
+  async updateRemedialRule(ruleId: string, input: RemedialRuleInput) {
+    return this.prisma.remedialRule.update({
+      where: { id: ruleId },
+      data: {
+        actionType: input.actionType,
+        minScoreExclusive: input.minScoreExclusive,
+        recommendationMessage: input.recommendationMessage,
+        recommendationTitle: input.recommendationTitle,
+      },
+    });
+  }
+
+  private async ensureCurriculumModule(moduleId: string) {
+    const module = await this.prisma.curriculumModule.findUnique({ where: { id: moduleId } });
+    if (!module) throw new NotFoundException("Modul kurikulum tidak ditemukan.");
+    return module;
+  }
+
+  private parseLessonType(type?: string) {
+    const fallback = CurriculumLessonType.CONCEPT;
+    if (!type) return fallback;
+    if (!Object.values(CurriculumLessonType).includes(type as CurriculumLessonType)) {
+      throw new BadRequestException("Tipe materi tidak valid.");
+    }
+    return type as CurriculumLessonType;
   }
 
   private getStudentProfileId(currentUser: AuthenticatedUser) {

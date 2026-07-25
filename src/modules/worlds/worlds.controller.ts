@@ -28,4 +28,13 @@ export class WorldsController {
   findCurriculum(@Param("worldKey") worldKey: string) {
     return this.worldsService.findCurriculumByWorldKey(worldKey);
   }
+
+  @Get(":worldKey/adaptive-plan")
+  @ResponseMessage("Rencana adaptif berhasil diambil.")
+  findAdaptivePlan(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Param("worldKey") worldKey: string,
+  ) {
+    return this.worldsService.findAdaptivePlan(currentUser, worldKey);
+  }
 }
