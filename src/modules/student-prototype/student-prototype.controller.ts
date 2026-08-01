@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Put, Query } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { ResponseMessage } from "../../common/decorators/response-message.decorator";
 import { SaveOnboardingDto } from "../student-onboarding/dto/save-onboarding.dto";
@@ -41,6 +41,18 @@ export class StudentPrototypeController {
     @Query("worldKey") worldKey?: string,
   ) {
     return this.service.startPlacement(studentProfileId, worldKey);
+  }
+
+  @Get(":studentProfileId/placement/questions")
+  @ResponseMessage("Pertanyaan placement prototype berhasil diambil.")
+  getPlacementQuestions(@Param("studentProfileId") studentProfileId: string) {
+    return this.service.getPlacementQuestions(studentProfileId);
+  }
+
+  @Get(":studentProfileId/baleverse")
+  @ResponseMessage("Data BaleVerse prototype berhasil diambil.")
+  getBaleVerse(@Param("studentProfileId") studentProfileId: string) {
+    return this.service.getBaleVerse(studentProfileId);
   }
 
   @Put("placement/:attemptId/answers/:questionId")
