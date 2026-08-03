@@ -172,6 +172,36 @@ enum ConfidenceDeclaration {
   INSUFFICIENT_EVIDENCE
 }
 
+// Tipe soal generik untuk Quest (lihat blok model Quest* di bawah) - value
+// persis sama dengan payload string yang sudah dipakai Flutter
+// (QuestionType.payload di test_template_models.dart) supaya JSON dari API
+// bisa langsung dipetakan tanpa transform tambahan.
+enum QuestQuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_SELECT
+  BINARY_CHOICE
+  SHORT_TEXT
+  MATCHING
+  ORDERING
+  IMAGE_CHOICE
+  AUDIO_CHOICE
+  LONG_TEXT
+  CODE_INPUT
+  IMAGE_HOTSPOT
+  VOICE_RESPONSE
+  TIMELINE_BUILDER
+  EVIDENCE_BOARD
+}
+
+// codeInput, longText, voiceResponse sengaja tidak pernah AUTO_SCORED (lihat
+// quest-evaluation.util.ts) - butuh sandbox eksekusi kode atau rubrik
+// kualitatif yang tidak layak diskor otomatis lewat keyword matching.
+enum QuestEvaluationStatus {
+  AUTO_SCORED
+  MENTOR_REVIEW_NEEDED
+  VALIDATED
+}
+
 model User {
   id               String     @id @default(uuid()) @db.Uuid
   name             String
@@ -282,6 +312,7 @@ model StudentProfile {
   caseAssignments    CaseAssignment[]
   onboarding         StudentOnboarding?
   placementAttempts  PlacementAttempt[]
+  questAssignments   QuestAssignment[]
 
   @@index([schoolId])
   @@index([academicYear])
@@ -363,6 +394,38 @@ model PlacementAnalysisResult {
   attempt PlacementAttempt @relation(fields: [attemptId], references: [id])
 }
 
+model PlacementQuestionTemplate {
+  id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique
+  worldKey     String?
+  orderNumber  Int
+  questionType String
+  prompt       String
+  payload      Json
+  source       String   @default("CURRICULUM_WORKBOOK")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([worldKey])
+  @@index([orderNumber])
+  @@index([isActive])
+}
+
+model CurriculumSourceRecord {
+  id         String   @id @default(uuid()) @db.Uuid
+  workbook   String
+  sheetName  String
+  rowNumber  Int
+  sourceId   String?
+  payload    Json
+  importedAt DateTime @default(now())
+
+  @@unique([workbook, sheetName, rowNumber])
+  @@index([sheetName])
+  @@index([sourceId])
+}
+
 model Classroom {
   id                String   @id @default(uuid()) @db.Uuid
   schoolId          String   @db.Uuid
@@ -415,6 +478,9 @@ model Subject {
 model Competency {
   id          String   @id @default(uuid()) @db.Uuid
   subjectId   String   @db.Uuid
+  // Nullable - hanya diisi untuk kompetensi yang sudah punya Chapter
+  // (mis. dunia Scientia). Kompetensi lama (Numeria/Detectivia) tetap null.
+  chapterId   String?  @db.Uuid
   code        String
   name        String
   description String?
@@ -425,6 +491,7 @@ model Competency {
   updatedAt   DateTime @updatedAt
 
   subject           Subject                  @relation(fields: [subjectId], references: [id])
+  chapter           Chapter?                 @relation(fields: [chapterId], references: [id])
   subCompetencies   SubCompetency[]
   questions         Question[]
   prerequisites     CompetencyPrerequisite[] @relation("CompetencyPrerequisites")
@@ -437,10 +504,12 @@ model Competency {
   masteryStates     MasteryState[]
   masteryEvents     MasteryEvent[]
   caseQuestions     CaseQuestion[]
+  questQuestions    QuestQuestion[]
 
   @@unique([subjectId, code])
   @@index([subjectId])
   @@index([gradeLevel])
+  @@index([chapterId])
 }
 
 model SubCompetency {
@@ -454,8 +523,10 @@ model SubCompetency {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  competency Competency @relation(fields: [competencyId], references: [id])
-  questions  Question[]
+  competency     Competency      @relation(fields: [competencyId], references: [id])
+  questions      Question[]
+  quests         Quest[]
+  questQuestions QuestQuestion[]
 
   @@unique([competencyId, code])
   @@index([competencyId])
@@ -763,6 +834,9 @@ model World {
   curriculumModules  CurriculumModule[]
   caseMissions       CaseMission[]
   caseAssignments    CaseAssignment[]
+  chapters           Chapter[]
+  quests             Quest[]
+  questAssignments   QuestAssignment[]
 
   @@index([subjectId])
 }
@@ -1186,4 +1260,328 @@ model CaseAnswer {
 
   @@unique([caseAttemptId, caseQuestionId])
   @@index([caseQuestionId])
+}
+
+// =========================================================================
+// Quest: engine misi generik multi-tipe-soal (14 QuestQuestionType), dipakai
+// pertama kali oleh dunia Scientia. Beda dari Mission/Activity (Numeria,
+// pilihan-ganda saja) dan CaseMission (Detectivia, esai/bukti saja) - Quest
+// menampung tipe interaksi jauh lebih beragam (matching, ordering, hotspot,
+// evidence board, kode, dst) lewat 9 tabel anak QuestQuestion di bawah.
+// Skill Mastery & XP tetap reuse penuh MasteryState/ExperienceLedgerEntry -
+// lihat quest-evaluation.util.ts untuk aturan tipe mana yang AUTO_SCORED
+// vs MENTOR_REVIEW_NEEDED (codeInput/longText/voiceResponse sengaja tidak
+// pernah diskor otomatis, lihat catatan di enum QuestEvaluationStatus).
+// =========================================================================
+
+model Chapter {
+  id                          String        @id @default(uuid()) @db.Uuid
+  worldId                     String        @db.Uuid
+  chapterCode                 String        @unique
+  // Info sub-dunia (mis. "BioRealm") disimpan sebagai field deskriptif di
+  // sini, bukan tabel SubWorld terpisah - datanya masih terlalu tipis (1
+  // sub-dunia berisi konten sungguhan saat model ini ditulis) untuk
+  // dinormalisasi sendiri. Lihat catatan scope di plan implementasi.
+  subWorldKey                 String?
+  subWorldName                String?
+  chapterNumber               Int
+  title                       String
+  story                       String?
+  prerequisiteChapterId       String?       @db.Uuid
+  difficulty                  String?
+  estimatedDurationDays       Int?
+  recommendedSessions         Int?
+  goal                        String?
+  completionIndicator         String?
+  bossMissionUnlockMasteryPct Decimal?      @db.Decimal(5, 2)
+  status                      MissionStatus @default(DRAFT)
+  createdAt                   DateTime      @default(now())
+  updatedAt                   DateTime      @updatedAt
+
+  world               World        @relation(fields: [worldId], references: [id])
+  prerequisiteChapter Chapter?     @relation("ChapterPrerequisite", fields: [prerequisiteChapterId], references: [id])
+  unlockedByChapters  Chapter[]    @relation("ChapterPrerequisite")
+  competencies        Competency[]
+  quests              Quest[]
+
+  @@index([worldId])
+  @@index([prerequisiteChapterId])
+}
+
+model Quest {
+  id                    String        @id @default(uuid()) @db.Uuid
+  worldId               String        @db.Uuid
+  chapterId             String?       @db.Uuid
+  subCompetencyId       String?       @db.Uuid
+  code                  String        @unique
+  title                 String
+  missionType           String?
+  story                 String?
+  objective             String?
+  studentInstruction    String?
+  estimatedMinutes      Int           @default(10)
+  xpRewardFirst         Int           @default(0)
+  xpMultiplierSecond    Decimal?      @db.Decimal(3, 2)
+  xpMultiplierThirdPlus Decimal?      @db.Decimal(3, 2)
+  hints                 String[]
+  status                MissionStatus @default(DRAFT)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  world         World             @relation(fields: [worldId], references: [id])
+  chapter       Chapter?          @relation(fields: [chapterId], references: [id])
+  subCompetency SubCompetency?    @relation(fields: [subCompetencyId], references: [id])
+  questions     QuestQuestion[]
+  assignments   QuestAssignment[]
+
+  @@index([worldId])
+  @@index([chapterId])
+  @@index([status])
+}
+
+model QuestQuestion {
+  id                   String            @id @default(uuid()) @db.Uuid
+  questId              String            @db.Uuid
+  code                 String            @unique
+  questionType         QuestQuestionType
+  competencyId         String            @db.Uuid
+  subCompetencyId      String?           @db.Uuid
+  measurementCategory  String?
+  difficulty           String?
+  bloomLevel           String?
+  orderNumber          Int
+  questionText         String
+  stimulusText         String?
+  instruction          String?
+  skillTags            String[]
+  masteryPoint         Int?
+  xpReward             Int?
+  estimatedTimeSeconds Int?
+  // Dipakai shortText (inputMode/maxLength/caseSensitive/allowEmpty/allowUnit)
+  // dan multipleSelect (scoringConfig) - lihat quest-evaluation.util.ts.
+  inputMode            String?
+  maxLength            Int?
+  caseSensitive        Boolean?
+  allowEmpty           Boolean?
+  allowUnit            Boolean?
+  scoringConfig        String?
+  sampleAnswer         String?
+  status               QuestionStatus    @default(DRAFT)
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  quest           Quest                  @relation(fields: [questId], references: [id])
+  competency      Competency             @relation(fields: [competencyId], references: [id])
+  subCompetency   SubCompetency?         @relation(fields: [subCompetencyId], references: [id])
+  options         QuestQuestionOption[]
+  matchingPairs   QuestMatchingPair[]
+  orderItems      QuestOrderItem[]
+  acceptedAnswers QuestAcceptedAnswer[]
+  rubricCriteria  QuestRubricCriterion[]
+  media           QuestMedia[]
+  hotspotAreas    QuestHotspotArea[]
+  evidenceItems   QuestEvidenceItem[]
+  codeConfig      QuestCodeConfig?
+  answers         QuestAnswer[]
+
+  @@index([questId])
+  @@index([competencyId])
+  @@index([subCompetencyId])
+}
+
+model QuestQuestionOption {
+  id              String  @id @default(uuid()) @db.Uuid
+  questQuestionId String  @db.Uuid
+  optionId        String
+  label           String
+  description     String?
+  imageUrl        String?
+  isCorrect       Boolean @default(false)
+  misconception   String?
+  displayOrder    Int
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@unique([questQuestionId, optionId])
+}
+
+model QuestMatchingPair {
+  id              String @id @default(uuid()) @db.Uuid
+  questQuestionId String @db.Uuid
+  leftId          String
+  leftLabel       String
+  rightId         String
+  rightLabel      String
+  pairOrder       Int
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+// Dipakai ordering DAN timelineBuilder - itemKind membedakan keduanya,
+// persis pola sheet ORDER_TIMELINE_ITEMS di curriculum-data.json.
+model QuestOrderItem {
+  id              String  @id @default(uuid()) @db.Uuid
+  questQuestionId String  @db.Uuid
+  itemKind        String
+  itemId          String
+  label           String
+  timeLabel       String?
+  description     String?
+  displayOrder    Int
+  correctPosition Int
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+model QuestAcceptedAnswer {
+  id               String   @id @default(uuid()) @db.Uuid
+  questQuestionId  String   @db.Uuid
+  answerText       String
+  normalizedAnswer String?
+  toleranceNumeric Decimal? @db.Decimal(10, 4)
+  unit             String?
+  isPrimary        Boolean  @default(false)
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+// Dipakai longText/voiceResponse - HANYA untuk reviewer manusia, tidak
+// pernah dibaca oleh quest-evaluation.util.ts (lihat QuestEvaluationStatus).
+model QuestRubricCriterion {
+  id                   String  @id @default(uuid()) @db.Uuid
+  questQuestionId      String  @db.Uuid
+  criterionId          String
+  criterion            String
+  criterionDescription String?
+  weightPct            Decimal @db.Decimal(5, 2)
+  scoreDescriptions    Json
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+model QuestMedia {
+  id                  String  @id @default(uuid()) @db.Uuid
+  questQuestionId     String  @db.Uuid
+  mediaType           String
+  url                 String
+  durationSeconds     Int?
+  maxReplay           Int?
+  transcriptAvailable Boolean @default(false)
+  transcript          String?
+  altText             String?
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+model QuestHotspotArea {
+  id              String  @id @default(uuid()) @db.Uuid
+  questQuestionId String  @db.Uuid
+  hotspotId       String
+  label           String
+  xRelative       Decimal @db.Decimal(5, 4)
+  yRelative       Decimal @db.Decimal(5, 4)
+  radiusRelative  Decimal @db.Decimal(5, 4)
+  isCorrect       Boolean @default(false)
+  misconception   String?
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+model QuestEvidenceItem {
+  id                String  @id @default(uuid()) @db.Uuid
+  questQuestionId   String  @db.Uuid
+  evidenceId        String
+  label             String
+  description       String?
+  category          String?
+  isCorrectEvidence Boolean @default(false)
+  misconception     String?
+  displayOrder      Int
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@index([questQuestionId])
+}
+
+// codeInput - config disimpan lengkap tapi TIDAK PERNAH dieksekusi oleh
+// backend (butuh sandbox terpisah yang belum ada, lihat catatan scope di
+// plan implementasi). Selalu MENTOR_REVIEW_NEEDED.
+model QuestCodeConfig {
+  id                      String  @id @default(uuid()) @db.Uuid
+  questQuestionId         String  @unique @db.Uuid
+  language                String
+  initialCode             String  @default("")
+  readOnlyPrefix          String?
+  expectedOutput          String?
+  backendExecutionEnabled Boolean @default(false)
+  testCases               Json?
+
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+}
+
+model QuestAssignment {
+  id               String           @id @default(uuid()) @db.Uuid
+  studentProfileId String           @db.Uuid
+  worldId          String           @db.Uuid
+  questId          String           @db.Uuid
+  assignedDate     DateTime         @db.Date
+  status           AssignmentStatus @default(ASSIGNED)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  student StudentProfile @relation(fields: [studentProfileId], references: [id])
+  world   World          @relation(fields: [worldId], references: [id])
+  quest   Quest          @relation(fields: [questId], references: [id])
+  attempt QuestAttempt?
+
+  @@unique([studentProfileId, worldId, assignedDate])
+  @@index([questId])
+}
+
+model QuestAttempt {
+  id                String        @id @default(uuid()) @db.Uuid
+  questAssignmentId String        @unique @db.Uuid
+  status            AttemptStatus @default(IN_PROGRESS)
+  startedAt         DateTime      @default(now())
+  submittedAt       DateTime?
+  overallScore      Decimal?      @db.Decimal(5, 2)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  assignment QuestAssignment @relation(fields: [questAssignmentId], references: [id])
+  answers    QuestAnswer[]
+
+  @@index([status])
+}
+
+model QuestAnswer {
+  id               String                 @id @default(uuid()) @db.Uuid
+  questAttemptId   String                 @db.Uuid
+  questQuestionId  String                 @db.Uuid
+  payload          Json?
+  score            Decimal?               @db.Decimal(5, 2)
+  isCorrect        Boolean?
+  evaluationStatus QuestEvaluationStatus?
+  evaluatorDetail  Json?
+  answeredAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  attempt  QuestAttempt  @relation(fields: [questAttemptId], references: [id])
+  question QuestQuestion @relation(fields: [questQuestionId], references: [id])
+
+  @@unique([questAttemptId, questQuestionId])
+  @@index([questQuestionId])
 }

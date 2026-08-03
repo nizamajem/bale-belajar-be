@@ -22,6 +22,7 @@ import { StudentPlacementModule } from "./modules/student-placement/student-plac
 import { StudentPrototypeModule } from "./modules/student-prototype/student-prototype.module";
 import { StudentAccountModule } from "./modules/student-account/student-account.module";
 import { StudentCasesModule } from "./modules/student-cases/student-cases.module";
+import { StudentQuestsModule } from "./modules/student-quests/student-quests.module";
 import { WorldsModule } from "./modules/worlds/worlds.module";
 
 @Module({
@@ -52,6 +53,7 @@ import { WorldsModule } from "./modules/worlds/worlds.module";
     StudentPrototypeModule,
     StudentAccountModule,
     StudentCasesModule,
+    StudentQuestsModule,
   ],
 })
 export class AppModule {}

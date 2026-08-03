@@ -10,7 +10,9 @@
     "test": "jest --passWithNoTests",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
-    "seed": "node prisma/seed-runner.js"
+    "seed": "node prisma/seed-runner.js",
+    "import:curriculum": "node prisma/import-curriculum-runner.js",
+    "normalize:curriculum": "node prisma/normalize-curriculum-runner.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.5",
