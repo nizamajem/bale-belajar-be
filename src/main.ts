@@ -3,13 +3,14 @@ import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { json, urlencoded } from "express";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const configService = app.get(ConfigService);
   const apiPrefix = configService.get<string>("API_PREFIX", "api/v1");
   const port = configService.get<number>("PORT", 4000);
@@ -17,6 +18,8 @@ async function bootstrap() {
   const profileUrl = configService.get<string>("PROFILE_URL", "http://localhost:3001");
 
   app.setGlobalPrefix(apiPrefix);
+  app.use(json({ limit: "25mb" }));
+  app.use(urlencoded({ extended: true, limit: "25mb" }));
   app.use(helmet());
   app.enableCors({
     origin: [frontendUrl, profileUrl],

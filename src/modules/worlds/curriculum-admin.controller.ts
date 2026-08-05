@@ -5,6 +5,7 @@ import { ResponseMessage } from "../../common/decorators/response-message.decora
 import { Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { CurriculumImportService } from "./curriculum-import.service";
 import { WorldsService } from "./worlds.service";
 
 type CurriculumModulePayload = {
@@ -46,12 +47,27 @@ type RemedialRulePayload = {
 @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
 @Controller("admin/curriculum")
 export class CurriculumAdminController {
-  constructor(private readonly worldsService: WorldsService) {}
+  constructor(
+    private readonly worldsService: WorldsService,
+    private readonly curriculumImportService: CurriculumImportService,
+  ) {}
 
   @Get("readiness")
   @ResponseMessage("Kesiapan kurikulum berhasil dicek.")
   readiness() {
     return this.worldsService.curriculumReadiness();
+  }
+
+  @Get("import-template")
+  @ResponseMessage("Template import kurikulum berhasil diambil.")
+  importTemplate() {
+    return this.curriculumImportService.template();
+  }
+
+  @Post("import-json")
+  @ResponseMessage("Import kurikulum berhasil diproses.")
+  importJson(@Body() body: { curriculum?: Record<string, unknown>; normalize?: boolean }) {
+    return this.curriculumImportService.importJson(body);
   }
 
   @Get("worlds/:worldKey")
