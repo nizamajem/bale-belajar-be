@@ -7,6 +7,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { UsersQueryDto } from "./dto/users-query.dto";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { LearningHistoryQueryDto } from "./dto/learning-history-query.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UsersService } from "./users.service";
 
@@ -22,6 +23,12 @@ export class UsersController {
   @ResponseMessage("Data user berhasil diambil.")
   findAll(@Query() query: UsersQueryDto) {
     return this.usersService.findAll(query);
+  }
+
+  @Get("history")
+  @ResponseMessage("History belajar berhasil diambil.")
+  findLearningHistory(@Query() query: LearningHistoryQueryDto) {
+    return this.usersService.findLearningHistory(query);
   }
 
   @Get(":id/history")
