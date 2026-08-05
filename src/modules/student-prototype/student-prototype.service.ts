@@ -1,10 +1,10 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { MissionStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma/prisma.service";
 import { SaveOnboardingDto } from "../student-onboarding/dto/save-onboarding.dto";
 import { SavePlacementAnswerDto } from "../student-placement/dto/save-placement-answer.dto";
 
-const TOTAL_PLACEMENT_QUESTIONS = 13;
+const DEFAULT_WORLD_KEY = "scientia";
 
 @Injectable()
 export class StudentPrototypeService {
@@ -13,7 +13,7 @@ export class StudentPrototypeService {
   async startSession() {
     const student = await this.prisma.studentProfile.create({
       data: {
-        fullName: "Nara",
+        fullName: "Pengguna BaleBelajar",
         gradeLevel: 10,
       },
     });
@@ -57,22 +57,26 @@ export class StudentPrototypeService {
 
   async startPlacement(studentProfileId: string, worldKey?: string) {
     await this.assertStudent(studentProfileId);
+    const selectedWorldKey = await this.resolveWorldKey(worldKey);
+    const totalQuestions = await this.getPlacementTotal(selectedWorldKey);
     const attempt = await this.prisma.placementAttempt.create({
       data: {
         studentProfileId,
-        worldKey,
-        totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+        worldKey: selectedWorldKey,
+        totalQuestions,
       },
     });
 
-    return { attemptId: attempt.id, totalQuestions: TOTAL_PLACEMENT_QUESTIONS };
+    return { attemptId: attempt.id, totalQuestions };
   }
 
   async getPlacementQuestions(studentProfileId: string) {
-    await this.assertStudent(studentProfileId);
+    const student = await this.assertStudent(studentProfileId);
+    const selectedWorldKey = await this.resolveWorldKey(student.onboarding?.learningWorld);
+    const questions = await this.getPlacementQuestionPayloads(selectedWorldKey);
     return {
-      totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
-      questions: this.placementQuestions(),
+      totalQuestions: questions.length,
+      questions,
     };
   }
 
@@ -81,6 +85,7 @@ export class StudentPrototypeService {
       where: { id: studentProfileId },
       include: {
         onboarding: true,
+        gameProfile: true,
         placementAttempts: {
           include: { analysis: true },
           orderBy: { createdAt: "desc" },
@@ -91,76 +96,82 @@ export class StudentPrototypeService {
     if (!student) throw new NotFoundException("Sesi siswa tidak ditemukan.");
 
     const analysis = student.placementAttempts[0]?.analysis;
-    const selectedWorld =
-      analysis?.selectedWorld ?? student.onboarding?.learningWorld ?? "DETECTIVIA";
+    const selectedWorld = await this.resolveWorldKey(
+      analysis?.selectedWorld ?? student.onboarding?.learningWorld,
+    );
+
+    const worlds = await this.prisma.world.findMany({
+      where: { isActive: true },
+      include: {
+        subject: { select: { name: true } },
+        worldProgress: { where: { studentProfileId }, take: 1 },
+        quests: {
+          where: { status: MissionStatus.ACTIVE },
+          orderBy: { createdAt: "asc" },
+          take: 3,
+        },
+        chapters: { orderBy: { chapterNumber: "asc" }, take: 5 },
+      },
+      orderBy: { orderNumber: "asc" },
+    });
+    if (worlds.length === 0) {
+      throw new NotFoundException(
+        "Belum ada data dunia aktif di database. Jalankan import dan normalisasi kurikulum.",
+      );
+    }
+
+    const selectedWorldData =
+      worlds.find((world) => world.key === selectedWorld) ?? worlds[0];
+    const activeQuest =
+      selectedWorldData.quests[0] ?? worlds.flatMap((world) => world.quests)[0];
 
     return {
       profile: {
         name: student.fullName,
-        rank: "Tunas II",
+        rank: student.gameProfile
+          ? this.rankForLevel(student.gameProfile.accountLevel)
+          : "Pemula",
         level: student.gradeLevel ?? 10,
-        foundation: analysis?.recommendedLevel ?? "FOUNDATION_3",
+        foundation: analysis?.recommendedLevel ?? "FOUNDATION_1",
       },
       stats: {
-        xp: 240,
-        streak: 3,
-        weeklyCompleted: 2,
-        weeklyTarget: 3,
+        xp: student.gameProfile?.accountXp ?? 0,
+        streak: student.gameProfile?.streakCurrent ?? 0,
+        weeklyCompleted: Math.min(
+          student.gameProfile?.streakCurrent ?? 0,
+          student.gameProfile?.streakTargetPerWeek ?? 3,
+        ),
+        weeklyTarget: student.gameProfile?.streakTargetPerWeek ?? 3,
       },
-      selectedWorld,
-      todayMission: analysis?.firstMission ?? this.firstMission(selectedWorld),
-      worlds: [
-        {
-          key: "NUMERIA",
-          name: "Numeria",
-          subject: "Matematika",
-          description: "Latih matematika lewat teka-teki ringan.",
-          exampleMission: "Pecahkan pola angka.",
-          mastery: selectedWorld === "NUMERIA" ? 42 : 12,
-          unlocked: true,
-        },
-        {
-          key: "KODEX",
-          name: "KodeX",
-          subject: "Informatika",
-          description: "Belajar logika komputer tanpa terasa berat.",
-          exampleMission: "Susun langkah algoritma.",
-          mastery: selectedWorld === "KODEX" ? 42 : 8,
-          unlocked: true,
-        },
-        {
-          key: "DETECTIVIA",
-          name: "Detectivia",
-          subject: "Observasi dan Analisis Bukti",
-          description: "Amati petunjuk dan pecahkan kasus.",
-          exampleMission: "Cari bukti yang paling kuat.",
-          mastery: selectedWorld === "DETECTIVIA" ? 42 : 10,
-          unlocked: true,
-        },
-      ],
-      missions: [
-        {
-          id: "active-mission",
-          title: "Gerbang Distribusi",
-          description: "Memahami cara mendistribusikan angka ke semua bagian.",
-          durationMinutes: 8,
-          rewardXp: 90,
-          active: true,
-        },
-        {
-          id: "observation-practice",
-          title: "Latihan Observasi",
-          description: "Kenali petunjuk penting dari gambar.",
-          durationMinutes: 6,
-          rewardXp: 40,
-          active: false,
-        },
-      ],
-      learningPath: [
-        { step: 1, title: "Pengenalan", completed: true, stars: 3 },
-        { step: 2, title: "Detectivia", active: true, stars: 1 },
-        { step: 3, title: "Sumber Daya", locked: true, stars: 0 },
-      ],
+      selectedWorld: selectedWorldData.key,
+      todayMission: activeQuest
+        ? this.questToMission(activeQuest)
+        : await this.firstMission(selectedWorldData.key),
+      worlds: worlds.map((world) => ({
+        key: world.key,
+        name: world.name,
+        subject: world.subject.name,
+        description: world.themeDescription ?? world.characterClass,
+        exampleMission: world.quests[0]?.title ?? "Misi belajar pertama",
+        mastery: world.worldProgress[0]?.worldLevel ?? 1,
+        unlocked: true,
+      })),
+      missions: selectedWorldData.quests.map((quest, index) => ({
+        id: quest.id,
+        title: quest.title,
+        description: quest.objective ?? quest.studentInstruction ?? quest.story ?? "",
+        durationMinutes: quest.estimatedMinutes,
+        rewardXp: quest.xpRewardFirst,
+        active: index === 0,
+      })),
+      learningPath: selectedWorldData.chapters.map((chapter, index) => ({
+        step: chapter.chapterNumber,
+        title: chapter.title,
+        completed: index === 0,
+        active: index === 1,
+        locked: index > 1,
+        stars: index === 0 ? 3 : index === 1 ? 1 : 0,
+      })),
     };
   }
 
@@ -223,10 +234,12 @@ export class StudentPrototypeService {
     });
     if (!attempt) throw new NotFoundException("Attempt tidak ditemukan.");
 
+    const totalQuestions =
+      attempt.totalQuestions || (await this.getPlacementTotal(attempt.worldKey ?? undefined));
     const answered = attempt.answers.filter((answer) => !answer.isSkipped);
     const skipped = attempt.answers.length - answered.length;
-    const completionRatio = answered.length / TOTAL_PLACEMENT_QUESTIONS;
-    const selectedWorld = attempt.worldKey ?? "DETECTIVIA";
+    const completionRatio = totalQuestions === 0 ? 0 : answered.length / totalQuestions;
+    const selectedWorld = await this.resolveWorldKey(attempt.worldKey);
     const recommendedLevel =
       completionRatio >= 0.75
         ? "FOUNDATION_3"
@@ -242,11 +255,11 @@ export class StudentPrototypeService {
         selectedWorld,
         strengths: ["PATTERN_RECOGNITION", "IMAGE_REASONING", "ORDERING"],
         focusAreas: ["EXPLAIN_REASONING", "VERIFY_INFORMATION", "STEP_BY_STEP"],
-        firstMission: this.firstMission(selectedWorld),
+        firstMission: await this.firstMission(selectedWorld),
         scoreSummary: {
           answered: answered.length,
           skipped,
-          totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+          totalQuestions,
           completionRatio,
         },
       },
@@ -256,11 +269,11 @@ export class StudentPrototypeService {
         selectedWorld,
         strengths: ["PATTERN_RECOGNITION", "IMAGE_REASONING", "ORDERING"],
         focusAreas: ["EXPLAIN_REASONING", "VERIFY_INFORMATION", "STEP_BY_STEP"],
-        firstMission: this.firstMission(selectedWorld),
+        firstMission: await this.firstMission(selectedWorld),
         scoreSummary: {
           answered: answered.length,
           skipped,
-          totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+          totalQuestions,
           completionRatio,
         },
       },
@@ -281,185 +294,102 @@ export class StudentPrototypeService {
     };
   }
 
-  private firstMission(worldKey: string) {
+  private async firstMission(worldKey: string) {
+    const quest = await this.prisma.quest.findFirst({
+      where: { world: { key: worldKey }, status: MissionStatus.ACTIVE },
+      orderBy: { createdAt: "asc" },
+    });
+    if (quest) return this.questToMission(quest);
     return {
-      id: `first-${worldKey.toLowerCase()}`,
-      title:
-        worldKey === "KODEX"
-          ? "Gerbang Distribusi"
-          : worldKey === "NUMERIA"
-            ? "Pola Angka Pertama"
-            : "Misteri Jadwal yang Berubah",
-      durationMinutes: 8,
-      activityCount: 5,
-      rewardXp: 30,
+      id: `first-${worldKey}`,
+      title: "Misi belajar pertama",
+      durationMinutes: 10,
+      activityCount: 0,
+      rewardXp: 0,
     };
   }
 
-  private placementQuestions() {
-    return [
-      {
-        id: "placement-single-choice",
-        questionType: "SINGLE_CHOICE",
-        prompt: "Jika 3x + 5 = 20, berapa nilai x?",
-        options: [
-          { id: "a", label: "3" },
-          { id: "b", label: "4" },
-          { id: "c", label: "5" },
-          { id: "d", label: "6" },
-        ],
+  private questToMission(quest: {
+    id: string;
+    title: string;
+    estimatedMinutes: number;
+    xpRewardFirst: number;
+  }) {
+    return {
+      id: quest.id,
+      title: quest.title,
+      durationMinutes: quest.estimatedMinutes,
+      activityCount: 5,
+      rewardXp: quest.xpRewardFirst,
+    };
+  }
+
+  private async getPlacementQuestionPayloads(worldKey?: string) {
+    const resolvedWorldKey = await this.resolveWorldKey(worldKey);
+    const templates = await this.prisma.placementQuestionTemplate.findMany({
+      where: {
+        isActive: true,
+        OR: [{ worldKey: resolvedWorldKey }, { worldKey: null }],
       },
-      {
-        id: "placement-multiple-select",
-        questionType: "MULTIPLE_SELECT",
-        prompt: "Manakah yang termasuk bilangan genap?",
-        instruction: "Pilih semua jawaban yang sesuai.",
-        options: [
-          { id: "a", label: "3" },
-          { id: "b", label: "4" },
-          { id: "c", label: "6" },
-          { id: "d", label: "9" },
-        ],
-      },
-      {
-        id: "placement-binary-choice",
-        questionType: "BINARY_CHOICE",
-        prompt: "Semua bilangan genap pasti habis dibagi 2.",
-        options: [
-          { id: "true", label: "Benar" },
-          { id: "false", label: "Salah" },
-        ],
-      },
-      {
-        id: "placement-short-text",
-        questionType: "SHORT_TEXT",
-        prompt: "Berapa hasil dari 72 ÷ 8?",
-        instruction: "Tulis jawaban berupa angka saja.",
-        responseConfig: { inputMode: "numeric", maxLength: 20 },
-      },
-      {
-        id: "placement-matching",
-        questionType: "MATCHING",
-        prompt: "Pasangkan istilah di kiri dengan pengertiannya di kanan!",
-        matchingPairs: [
-          {
-            leftId: "variable",
-            leftLabel: "Variable",
-            rightId: "data",
-            rightLabel: "Tempat menyimpan data yang nilainya dapat berubah.",
-          },
-          {
-            leftId: "algorithm",
-            leftLabel: "Algorithm",
-            rightId: "steps",
-            rightLabel: "Urutan langkah untuk menyelesaikan masalah.",
-          },
-          {
-            leftId: "loop",
-            leftLabel: "Loop",
-            rightId: "repeat",
-            rightLabel: "Struktur perulangan yang menjalankan blok kode berulang.",
-          },
-          {
-            leftId: "function",
-            leftLabel: "Function",
-            rightId: "reuse",
-            rightLabel: "Blok kode yang bisa digunakan kembali.",
-          },
-        ],
-      },
-      {
-        id: "placement-ordering",
-        questionType: "ORDERING",
-        prompt: "Susun langkah-langkah fotosintesis dengan benar!",
-        orderingItems: [
-          { id: "water", label: "Air diserap akar dan diangkut ke daun." },
-          { id: "carbon", label: "Karbon dioksida masuk melalui stomata daun." },
-          { id: "light", label: "Cahaya matahari diserap oleh klorofil." },
-          { id: "glucose", label: "Terbentuk glukosa sebagai makanan tumbuhan." },
-        ],
-      },
-      {
-        id: "placement-image-choice",
-        questionType: "IMAGE_CHOICE",
-        prompt: "Bulan manakah yang memiliki curah hujan tertinggi?",
-        instruction: "Perhatikan grafik sederhana pada gambar.",
-        media: { type: "image", url: "assets/mascot/kenalan.png" },
-        options: [
-          { id: "a", label: "Januari" },
-          { id: "b", label: "Maret" },
-          { id: "c", label: "Mei" },
-          { id: "d", label: "Juni" },
-        ],
-      },
-      {
-        id: "placement-audio-choice",
-        questionType: "AUDIO_CHOICE",
-        prompt: "Dengarkan audio lalu pilih jawaban yang paling tepat.",
-        media: {
-          type: "audio",
-          url: "audio/sfx/button_tap_soft_wood_kalimba_0_25s.ogg",
-          durationSeconds: 1,
-          maxReplay: 3,
-          transcriptAvailable: false,
-        },
-        options: [
-          { id: "a", label: "Instruksi belajar" },
-          { id: "b", label: "Cerita liburan" },
-          { id: "c", label: "Pengumuman hadiah" },
-          { id: "d", label: "Daftar belanja" },
-        ],
-      },
-      {
-        id: "placement-long-text",
-        questionType: "LONG_TEXT",
-        prompt: "Jelaskan dengan singkat cara menjaga lingkungan sekolah.",
-      },
-      {
-        id: "placement-code-input",
-        questionType: "CODE_INPUT",
-        prompt: "Lengkapi kode sederhana untuk menampilkan angka 1 sampai 3.",
-        codeConfig: {
-          language: "pseudo",
-          initialCode: "for i in range(1, 4):\n  print(i)",
-          backendExecutionEnabled: false,
-        },
-      },
-      {
-        id: "placement-image-hotspot",
-        questionType: "IMAGE_HOTSPOT",
-        prompt: "Ketuk posisi kucing pada gambar.",
-        media: { type: "image", url: "assets/mascot/kenalan.png" },
-        hotspotAreas: [
-          { id: "cat", label: "Kucing", x: 0.62, y: 0.48, radius: 0.1 },
-        ],
-      },
-      {
-        id: "placement-voice-response",
-        questionType: "VOICE_RESPONSE",
-        prompt: "Apa yang dapat kita lakukan untuk menjaga kelestarian bumi?",
-        media: { type: "image", url: "assets/mascot/analisis.png" },
-      },
-      {
-        id: "placement-timeline-builder",
-        questionType: "TIMELINE_BUILDER",
-        prompt: "Susun urutan peristiwa berikut dengan benar!",
-        timelineItems: [
-          { id: "a", label: "Ayam berkokok menyambut pagi." },
-          { id: "b", label: "Udin bangun tidur." },
-          { id: "c", label: "Udin sarapan sebelum pergi ke sekolah." },
-          { id: "e", label: "Udin berangkat ke sekolah." },
-          { id: "d", label: "Udin sampai di sekolah tepat waktu." },
-        ],
-      },
-    ];
+      orderBy: { orderNumber: "asc" },
+    });
+    if (templates.length === 0) {
+      throw new NotFoundException(
+        "Template placement belum tersedia di database. Jalankan normalize:curriculum.",
+      );
+    }
+    return templates.map((template) => template.payload as Record<string, unknown>);
+  }
+
+  private async getPlacementTotal(worldKey?: string) {
+    return (await this.getPlacementQuestionPayloads(worldKey)).length;
+  }
+
+  private async resolveWorldKey(rawWorldKey?: string | null) {
+    const normalized = rawWorldKey?.toLowerCase();
+    const aliases: Record<string, string> = {
+      sains: DEFAULT_WORLD_KEY,
+      sci: DEFAULT_WORLD_KEY,
+      science: DEFAULT_WORLD_KEY,
+      try_all: DEFAULT_WORLD_KEY,
+      numeria: DEFAULT_WORLD_KEY,
+      kodex: DEFAULT_WORLD_KEY,
+      detectivia: DEFAULT_WORLD_KEY,
+      bahasa: DEFAULT_WORLD_KEY,
+    };
+    const key = normalized ? aliases[normalized] ?? normalized : DEFAULT_WORLD_KEY;
+    const world = await this.prisma.world.findFirst({
+      where: { key, isActive: true },
+      select: { key: true },
+    });
+    if (world) return world.key;
+    const firstWorld = await this.prisma.world.findFirst({
+      where: { isActive: true },
+      orderBy: { orderNumber: "asc" },
+      select: { key: true },
+    });
+    if (!firstWorld) {
+      throw new NotFoundException(
+        "Belum ada data dunia aktif di database. Jalankan import dan normalisasi kurikulum.",
+      );
+    }
+    return firstWorld.key;
+  }
+
+  private rankForLevel(level: number) {
+    if (level >= 20) return "Mentor Muda";
+    if (level >= 10) return "Penjelajah";
+    if (level >= 5) return "Tunas II";
+    return "Pemula";
   }
 
   private async assertStudent(studentProfileId: string) {
     const student = await this.prisma.studentProfile.findUnique({
       where: { id: studentProfileId },
+      include: { onboarding: true },
     });
     if (!student) throw new NotFoundException("Sesi siswa tidak ditemukan.");
+    return student;
   }
 
   private async assertAttempt(attemptId: string) {

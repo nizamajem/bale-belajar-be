@@ -9,26 +9,25 @@ import { PrismaService } from "../../database/prisma/prisma.service";
 import { SavePlacementAnswerDto } from "./dto/save-placement-answer.dto";
 import { StartPlacementDto } from "./dto/start-placement.dto";
 
-const TOTAL_PLACEMENT_QUESTIONS = 13;
-
 @Injectable()
 export class StudentPlacementService {
   constructor(private readonly prisma: PrismaService) {}
 
   async start(currentUser: AuthenticatedUser, dto: StartPlacementDto) {
     const studentProfileId = this.getStudentProfileId(currentUser);
+    const totalQuestions = await this.getPlacementTotal(dto.worldKey);
 
     const attempt = await this.prisma.placementAttempt.create({
       data: {
         studentProfileId,
         worldKey: dto.worldKey,
-        totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+        totalQuestions,
       },
     });
 
     return {
       attempt,
-      totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+      totalQuestions,
     };
   }
 
@@ -136,16 +135,18 @@ export class StudentPlacementService {
 
     if (!attempt) throw new NotFoundException("Attempt tidak ditemukan.");
 
+    const totalQuestions =
+      attempt.totalQuestions || (await this.getPlacementTotal(attempt.worldKey ?? undefined));
     const answered = attempt.answers.filter((answer) => !answer.isSkipped);
     const skipped = attempt.answers.filter((answer) => answer.isSkipped);
-    const completionRatio = answered.length / TOTAL_PLACEMENT_QUESTIONS;
+    const completionRatio = totalQuestions === 0 ? 0 : answered.length / totalQuestions;
     const recommendedLevel =
       completionRatio >= 0.75
         ? "FOUNDATION_3"
         : completionRatio >= 0.45
           ? "FOUNDATION_2"
           : "FOUNDATION_1";
-    const selectedWorld = attempt.worldKey ?? "DETECTIVIA";
+    const selectedWorld = await this.resolveWorldKey(attempt.worldKey);
     const strengths = this.pickStrengths(answered.map((answer) => answer.questionType));
     const focusAreas = skipped.length > 4
       ? ["STEP_BY_STEP", "VERIFY_INFORMATION", "EXPLAIN_REASONING"]
@@ -159,11 +160,11 @@ export class StudentPlacementService {
         selectedWorld,
         strengths,
         focusAreas,
-        firstMission: this.firstMission(selectedWorld),
+        firstMission: await this.firstMission(selectedWorld),
         scoreSummary: {
           answered: answered.length,
           skipped: skipped.length,
-          totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+          totalQuestions,
           completionRatio,
         },
       },
@@ -173,11 +174,11 @@ export class StudentPlacementService {
         selectedWorld,
         strengths,
         focusAreas,
-        firstMission: this.firstMission(selectedWorld),
+        firstMission: await this.firstMission(selectedWorld),
         scoreSummary: {
           answered: answered.length,
           skipped: skipped.length,
-          totalQuestions: TOTAL_PLACEMENT_QUESTIONS,
+          totalQuestions,
           completionRatio,
         },
       },
@@ -201,20 +202,53 @@ export class StudentPlacementService {
       : ["PATTERN_RECOGNITION", "IMAGE_REASONING", "ORDERING"];
   }
 
-  private firstMission(worldKey: string) {
-    const title =
-      worldKey === "KODEX"
-        ? "Gerbang Distribusi"
-        : worldKey === "NUMERIA"
-          ? "Pola Angka Pertama"
-          : "Misteri Jadwal yang Berubah";
+  private async getPlacementTotal(worldKey?: string | null) {
+    const normalizedWorldKey = await this.resolveWorldKey(worldKey);
+    const worldSpecific = await this.prisma.placementQuestionTemplate.count({
+      where: { isActive: true, worldKey: normalizedWorldKey },
+    });
+    if (worldSpecific > 0) return worldSpecific;
+    return this.prisma.placementQuestionTemplate.count({
+      where: { isActive: true },
+    });
+  }
+
+  private async resolveWorldKey(worldKey?: string | null) {
+    const normalized = worldKey?.toLowerCase();
+    if (normalized) {
+      const existing = await this.prisma.world.findUnique({
+        where: { key: normalized },
+        select: { key: true },
+      });
+      if (existing) return existing.key;
+    }
+
+    const firstWorld = await this.prisma.world.findFirst({
+      where: { isActive: true },
+      orderBy: { orderNumber: "asc" },
+      select: { key: true },
+    });
+    return firstWorld?.key ?? normalized ?? "scientia";
+  }
+
+  private async firstMission(worldKey: string) {
+    const quest = await this.prisma.quest.findFirst({
+      where: {
+        status: "ACTIVE",
+        world: { key: worldKey },
+      },
+      orderBy: { code: "asc" },
+      include: {
+        _count: { select: { questions: true } },
+      },
+    });
 
     return {
-      id: `first-${worldKey.toLowerCase()}`,
-      title,
-      durationMinutes: 8,
-      activityCount: 5,
-      rewardXp: 30,
+      id: quest?.id ?? `first-${worldKey}`,
+      title: quest?.title ?? "Misi Pertama BaleBelajar",
+      durationMinutes: quest?.estimatedMinutes ?? 8,
+      activityCount: quest?._count.questions ?? 0,
+      rewardXp: quest?.xpRewardFirst ?? 30,
     };
   }
 

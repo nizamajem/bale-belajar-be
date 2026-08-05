@@ -1,0 +1,5 @@
+
+> bale-belajar-be@0.1.0 import:curriculum
+> node prisma/import-curriculum-runner.js
+
+Imported 985 baris dari 28 sheet ke CurriculumSourceRecord (workbook=BaleVerse_Curriculum_Scientia_Completed_Draft.xlsx).

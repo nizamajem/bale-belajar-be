@@ -1,0 +1,27 @@
+
+> bale-belajar-be@0.1.0 normalize:curriculum
+> node prisma/normalize-curriculum-runner.js
+
+Skip CODE_CONFIG untuk question_id "KDX_Q0001" (kemungkinan baris contoh dokumentasi, bukan konten sungguhan).
+Normalisasi kurikulum selesai:
+┌───────────────────────────────────────┬────────┐
+│ (index)                               │ Values │
+├───────────────────────────────────────┼────────┤
+│ World                                 │ 1      │
+│ Chapter                               │ 1      │
+│ Competency                            │ 3      │
+│ SubCompetency                         │ 6      │
+│ Quest                                 │ 7      │
+│ QuestQuestion                         │ 62     │
+│ QuestQuestion_skipped_assessment_only │ 0      │
+│ QuestQuestionOption                   │ 103    │
+│ QuestMatchingPair                     │ 29     │
+│ QuestOrderItem                        │ 26     │
+│ QuestAcceptedAnswer                   │ 18     │
+│ QuestRubricCriterion                  │ 14     │
+│ QuestMedia                            │ 7      │
+│ QuestHotspotArea                      │ 20     │
+│ QuestEvidenceItem                     │ 17     │
+│ QuestCodeConfig                       │ 0      │
+│ PlacementQuestionTemplate             │ 13     │
+└───────────────────────────────────────┴────────┘

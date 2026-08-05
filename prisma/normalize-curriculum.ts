@@ -1,4 +1,4 @@
-import { MissionStatus, Prisma, PrismaClient, QuestQuestionType } from '@prisma/client';
+import { MissionStatus, Prisma, PrismaClient, QuestQuestionType, QuestionStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -54,6 +54,23 @@ function json(row: Row, key: string): Prisma.InputJsonValue | undefined {
 // enum Prisma QuestQuestionType memakai SCREAMING_SNAKE ("AUDIO_CHOICE") -
 // sama persis konvensi payload string QuestionType di Flutter, jadi cukup
 // transform sekali di sini, tidak perlu tabel mapping manual.
+const PLACEMENT_TYPE_ORDER = [
+  QuestQuestionType.SINGLE_CHOICE,
+  QuestQuestionType.MULTIPLE_SELECT,
+  QuestQuestionType.BINARY_CHOICE,
+  QuestQuestionType.SHORT_TEXT,
+  QuestQuestionType.MATCHING,
+  QuestQuestionType.ORDERING,
+  QuestQuestionType.IMAGE_CHOICE,
+  QuestQuestionType.AUDIO_CHOICE,
+  QuestQuestionType.LONG_TEXT,
+  QuestQuestionType.CODE_INPUT,
+  QuestQuestionType.IMAGE_HOTSPOT,
+  QuestQuestionType.VOICE_RESPONSE,
+  QuestQuestionType.TIMELINE_BUILDER,
+  QuestQuestionType.EVIDENCE_BOARD,
+];
+
 function toQuestionType(value: string): QuestQuestionType | undefined {
   const snake = value.replace(/([A-Z])/g, '_$1').toUpperCase();
   return Object.values(QuestQuestionType).includes(snake as QuestQuestionType)
@@ -167,7 +184,7 @@ async function main() {
         goal: str(c, 'chapter_goal'),
         completionIndicator: str(c, 'completion_indicator'),
         bossMissionUnlockMasteryPct: num(c, 'boss_mission_unlock_mastery'),
-        status: MissionStatus.DRAFT,
+        status: MissionStatus.ACTIVE,
       },
       update: {
         title: c.chapter_title ?? c.chapter_id,
@@ -178,6 +195,7 @@ async function main() {
         goal: str(c, 'chapter_goal'),
         completionIndicator: str(c, 'completion_indicator'),
         bossMissionUnlockMasteryPct: num(c, 'boss_mission_unlock_mastery'),
+        status: MissionStatus.ACTIVE,
       },
     });
     chapterBySourceId.set(c.chapter_id, chapter);
@@ -274,7 +292,7 @@ async function main() {
         xpMultiplierSecond: num(m, 'xp_multiplier_second'),
         xpMultiplierThirdPlus: num(m, 'xp_multiplier_third_plus'),
         hints,
-        status: MissionStatus.DRAFT,
+        status: MissionStatus.ACTIVE,
       },
       update: {
         title: m.mission_title ?? m.mission_id,
@@ -286,6 +304,7 @@ async function main() {
         xpMultiplierSecond: num(m, 'xp_multiplier_second'),
         xpMultiplierThirdPlus: num(m, 'xp_multiplier_third_plus'),
         hints,
+        status: MissionStatus.ACTIVE,
       },
     });
     questBySourceId.set(m.mission_id, quest);
@@ -346,6 +365,7 @@ async function main() {
         allowUnit: optBool(typeConfig, 'allow_unit'),
         scoringConfig: str(typeConfig, 'scoring_config'),
         sampleAnswer: str(typeConfig, 'sample_answer'),
+        status: QuestionStatus.ACTIVE,
       },
       update: {
         questionType,
@@ -366,6 +386,7 @@ async function main() {
         allowUnit: optBool(typeConfig, 'allow_unit'),
         scoringConfig: str(typeConfig, 'scoring_config'),
         sampleAnswer: str(typeConfig, 'sample_answer'),
+        status: QuestionStatus.ACTIVE,
       },
     });
     questionBySourceId.set(q.question_id, question);
@@ -596,8 +617,142 @@ async function main() {
   }
   stats.QuestCodeConfig = codeConfigCount;
 
+  const placementQuestions = await prisma.questQuestion.findMany({
+    where: { code: { in: [...questionBySourceId.keys()] }, status: QuestionStatus.ACTIVE },
+    orderBy: { orderNumber: 'asc' },
+    include: {
+      options: { orderBy: { displayOrder: 'asc' } },
+      matchingPairs: { orderBy: { pairOrder: 'asc' } },
+      orderItems: { orderBy: { displayOrder: 'asc' } },
+      media: true,
+      hotspotAreas: true,
+      evidenceItems: { orderBy: { displayOrder: 'asc' } },
+      codeConfig: true,
+    },
+  });
+  const seenQuestionTypes = new Set<string>();
+  const placementQuestionsByType = new Map(
+    placementQuestions.map((question) => [question.questionType, question]),
+  );
+  let placementTemplateCount = 0;
+  for (const questionTypeValue of PLACEMENT_TYPE_ORDER) {
+    const question = placementQuestionsByType.get(questionTypeValue);
+    if (!question) continue;
+    const questionType = question.questionType.toString();
+    if (seenQuestionTypes.has(questionType)) continue;
+    seenQuestionTypes.add(questionType);
+    placementTemplateCount += 1;
+
+    await prisma.placementQuestionTemplate.upsert({
+      where: { code: `CURRICULUM_${question.code}` },
+      create: {
+        code: `CURRICULUM_${question.code}`,
+        worldKey: 'scientia',
+        orderNumber: placementTemplateCount,
+        questionType,
+        prompt: question.questionText,
+        payload: toPlacementPayload(question),
+      },
+      update: {
+        worldKey: 'scientia',
+        orderNumber: placementTemplateCount,
+        questionType,
+        prompt: question.questionText,
+        payload: toPlacementPayload(question),
+        isActive: true,
+      },
+    });
+  }
+  stats.PlacementQuestionTemplate = placementTemplateCount;
+
   console.log('Normalisasi kurikulum selesai:');
   console.table(stats);
+}
+
+type PlacementQuestionSource = Prisma.QuestQuestionGetPayload<{
+  include: {
+    options: true;
+    matchingPairs: true;
+    orderItems: true;
+    media: true;
+    hotspotAreas: true;
+    evidenceItems: true;
+    codeConfig: true;
+  };
+}>;
+
+function toPlacementPayload(question: PlacementQuestionSource): Prisma.InputJsonValue {
+  const media = question.media[0];
+  return {
+    id: question.code,
+    questionType: question.questionType.toString(),
+    prompt: question.questionText,
+    instruction: question.instruction ?? question.stimulusText ?? undefined,
+    options: question.options.map((option) => ({
+      id: option.optionId,
+      label: option.label,
+      description: option.description ?? undefined,
+      imageUrl: option.imageUrl ?? undefined,
+    })),
+    media: media
+      ? {
+          type: media.mediaType,
+          url: media.url,
+          durationSeconds: media.durationSeconds ?? undefined,
+          maxReplay: media.maxReplay ?? undefined,
+          transcriptAvailable: media.transcriptAvailable,
+          transcript: media.transcript ?? undefined,
+        }
+      : undefined,
+    responseConfig:
+      question.inputMode || question.maxLength || question.caseSensitive !== null
+        ? {
+            inputMode: question.inputMode ?? 'text',
+            maxLength: question.maxLength ?? 200,
+            caseSensitive: question.caseSensitive ?? false,
+            allowEmpty: question.allowEmpty ?? false,
+            allowUnit: question.allowUnit ?? false,
+          }
+        : undefined,
+    matchingPairs: question.matchingPairs.map((pair) => ({
+      leftId: pair.leftId,
+      leftLabel: pair.leftLabel,
+      rightId: pair.rightId,
+      rightLabel: pair.rightLabel,
+    })),
+    orderingItems: question.orderItems.map((item) => ({
+      id: item.itemId,
+      label: item.label,
+      timeLabel: item.timeLabel ?? undefined,
+      description: item.description ?? undefined,
+    })),
+    timelineItems: question.orderItems.map((item) => ({
+      id: item.itemId,
+      label: item.label,
+      timeLabel: item.timeLabel ?? undefined,
+      description: item.description ?? undefined,
+    })),
+    hotspotAreas: question.hotspotAreas.map((area) => ({
+      id: area.hotspotId,
+      label: area.label,
+      x: Number(area.xRelative),
+      y: Number(area.yRelative),
+      radius: Number(area.radiusRelative),
+    })),
+    evidenceItems: question.evidenceItems.map((item) => ({
+      id: item.evidenceId,
+      label: item.label,
+      description: item.description ?? undefined,
+      category: item.category ?? undefined,
+    })),
+    codeConfig: question.codeConfig
+      ? {
+          language: question.codeConfig.language,
+          initialCode: question.codeConfig.initialCode,
+          backendExecutionEnabled: question.codeConfig.backendExecutionEnabled,
+        }
+      : undefined,
+  } as Prisma.InputJsonValue;
 }
 
 main()
