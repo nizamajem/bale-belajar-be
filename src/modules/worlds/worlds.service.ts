@@ -624,7 +624,65 @@ export class WorldsService {
                 orderNumber: true,
                 competencyId: true,
                 competency: { select: { id: true, code: true, name: true } },
-                options: { select: { id: true } },
+                options: {
+                  orderBy: { displayOrder: "asc" },
+                  select: {
+                    optionId: true,
+                    label: true,
+                    isCorrect: true,
+                  },
+                },
+                matchingPairs: {
+                  orderBy: { pairOrder: "asc" },
+                  select: {
+                    leftId: true,
+                    leftLabel: true,
+                    rightId: true,
+                    rightLabel: true,
+                  },
+                },
+                orderItems: {
+                  orderBy: { correctPosition: "asc" },
+                  select: {
+                    itemId: true,
+                    label: true,
+                    correctPosition: true,
+                  },
+                },
+                acceptedAnswers: {
+                  select: {
+                    answerText: true,
+                    normalizedAnswer: true,
+                    isPrimary: true,
+                  },
+                },
+                rubricCriteria: {
+                  select: {
+                    criterion: true,
+                    weightPct: true,
+                  },
+                },
+                hotspotAreas: {
+                  select: {
+                    hotspotId: true,
+                    label: true,
+                    isCorrect: true,
+                  },
+                },
+                evidenceItems: {
+                  orderBy: { displayOrder: "asc" },
+                  select: {
+                    evidenceId: true,
+                    label: true,
+                    isCorrectEvidence: true,
+                  },
+                },
+                codeConfig: {
+                  select: {
+                    language: true,
+                    expectedOutput: true,
+                  },
+                },
               },
             },
           },
@@ -652,13 +710,85 @@ export class WorldsService {
       })),
       competencies,
       questions: world.quests.flatMap((quest) =>
-        quest.questions.map((question) => ({
-          ...question,
-          quest: { id: quest.id, code: quest.code, title: quest.title },
-          optionCount: question.options.length,
-        })),
+        quest.questions.map((question) => {
+          const correctOptions = question.options.filter((option) => option.isCorrect);
+          return {
+            ...question,
+            quest: { id: quest.id, code: quest.code, title: quest.title },
+            optionCount: question.options.length,
+            answerSummary: this.answerSummaryForQuestion(question),
+            answerDetail: {
+              options: question.options,
+              correctOptions,
+              matchingPairs: question.matchingPairs,
+              correctOrder: question.orderItems,
+              acceptedAnswers: question.acceptedAnswers,
+              rubricCriteria: question.rubricCriteria,
+              correctHotspots: question.hotspotAreas.filter((area) => area.isCorrect),
+              correctEvidence: question.evidenceItems.filter((item) => item.isCorrectEvidence),
+              codeConfig: question.codeConfig,
+            },
+          };
+        }),
       ),
     };
+  }
+
+  private answerSummaryForQuestion(question: {
+    questionType: QuestQuestionType;
+    options: { optionId: string; label: string; isCorrect: boolean }[];
+    matchingPairs: { leftLabel: string; rightLabel: string }[];
+    orderItems: { label: string; correctPosition: number }[];
+    acceptedAnswers: { answerText: string; isPrimary: boolean }[];
+    rubricCriteria: { criterion: string; weightPct: unknown }[];
+    hotspotAreas: { label: string; isCorrect: boolean }[];
+    evidenceItems: { label: string; isCorrectEvidence: boolean }[];
+    codeConfig: { expectedOutput: string | null } | null;
+  }) {
+    switch (question.questionType) {
+      case QuestQuestionType.SINGLE_CHOICE:
+      case QuestQuestionType.MULTIPLE_SELECT:
+      case QuestQuestionType.BINARY_CHOICE:
+      case QuestQuestionType.IMAGE_CHOICE:
+      case QuestQuestionType.AUDIO_CHOICE:
+        return question.options
+          .filter((option) => option.isCorrect)
+          .map((option) => `${option.optionId}. ${option.label}`)
+          .join("; ") || "Kunci opsi belum diisi";
+      case QuestQuestionType.MATCHING:
+        return question.matchingPairs
+          .map((pair) => `${pair.leftLabel} -> ${pair.rightLabel}`)
+          .join("; ") || "Pasangan belum diisi";
+      case QuestQuestionType.ORDERING:
+      case QuestQuestionType.TIMELINE_BUILDER:
+        return question.orderItems
+          .sort((a, b) => a.correctPosition - b.correctPosition)
+          .map((item) => `${item.correctPosition}. ${item.label}`)
+          .join("; ") || "Urutan belum diisi";
+      case QuestQuestionType.SHORT_TEXT:
+        return question.acceptedAnswers
+          .map((answer) => answer.answerText)
+          .join("; ") || "Accepted answer belum diisi";
+      case QuestQuestionType.IMAGE_HOTSPOT:
+        return question.hotspotAreas
+          .filter((area) => area.isCorrect)
+          .map((area) => area.label)
+          .join("; ") || "Hotspot benar belum diisi";
+      case QuestQuestionType.EVIDENCE_BOARD:
+        return question.evidenceItems
+          .filter((item) => item.isCorrectEvidence)
+          .map((item) => item.label)
+          .join("; ") || "Evidence benar belum diisi";
+      case QuestQuestionType.CODE_INPUT:
+        return question.codeConfig?.expectedOutput ?? "Expected output belum diisi";
+      case QuestQuestionType.LONG_TEXT:
+      case QuestQuestionType.VOICE_RESPONSE:
+        return question.rubricCriteria
+          .map((rubric) => `${rubric.criterion} (${String(rubric.weightPct)}%)`)
+          .join("; ") || "Rubrik review belum diisi";
+      default:
+        return "Kunci jawaban belum diisi";
+    }
   }
 
   async findImportedCurriculumByWorldKey(worldKey: string) {
