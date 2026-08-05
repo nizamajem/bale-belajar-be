@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { CurriculumLessonType } from "@prisma/client";
+import { CurriculumLessonType, QuestionStatus, QuestQuestionType } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
 
@@ -39,6 +39,19 @@ type RemedialRuleInput = {
   minScoreExclusive?: number;
   recommendationMessage?: string;
   recommendationTitle?: string;
+};
+
+type QuestQuestionInput = {
+  code?: string;
+  competencyId?: string;
+  difficulty?: string;
+  instruction?: string;
+  measurementCategory?: string;
+  orderNumber?: number;
+  questionText?: string;
+  questionType?: string;
+  status?: string;
+  stimulusText?: string;
 };
 
 const MIN_ACTIVE_QUESTS_PER_WORLD = 5;
@@ -226,12 +239,20 @@ export class WorldsService {
   }
 
   async findCurriculumByWorldKey(worldKey: string) {
+    return this.findCurriculumByWorldKeyInternal(worldKey, false);
+  }
+
+  async findAdminCurriculumByWorldKey(worldKey: string) {
+    return this.findCurriculumByWorldKeyInternal(worldKey, true);
+  }
+
+  private async findCurriculumByWorldKeyInternal(worldKey: string, includeDraft: boolean) {
     const world = await this.prisma.world.findUnique({
       where: { key: worldKey },
       include: {
         subject: { select: { id: true, code: true, name: true } },
         curriculumModules: {
-          where: { status: "ACTIVE" },
+          where: includeDraft ? {} : { status: "ACTIVE" },
           orderBy: { orderNumber: "asc" },
           include: {
             competency: { select: { id: true, code: true, name: true } },
@@ -266,6 +287,7 @@ export class WorldsService {
         bigIdea: module.bigIdea,
         orderNumber: module.orderNumber,
         estimatedMinutes: module.estimatedMinutes,
+        status: module.status,
         competency: module.competency,
         lessons: module.lessons.map((lesson) => ({
           id: lesson.id,
@@ -404,6 +426,14 @@ export class WorldsService {
     });
   }
 
+  async deleteCurriculumModule(moduleId: string) {
+    await this.ensureCurriculumModule(moduleId);
+    return this.prisma.curriculumModule.update({
+      where: { id: moduleId },
+      data: { status: "ARCHIVED" },
+    });
+  }
+
   async createCurriculumLesson(moduleId: string, input: CurriculumLessonInput) {
     await this.ensureCurriculumModule(moduleId);
     const orderNumber =
@@ -515,6 +545,139 @@ export class WorldsService {
     });
   }
 
+  async deleteRemedialRule(ruleId: string) {
+    return this.prisma.remedialRule.delete({ where: { id: ruleId } });
+  }
+
+  async findQuestQuestionsByWorldKey(worldKey: string) {
+    const world = await this.prisma.world.findUnique({
+      where: { key: worldKey },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        quests: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            code: true,
+            title: true,
+            status: true,
+            questions: {
+              orderBy: { orderNumber: "asc" },
+              select: {
+                id: true,
+                code: true,
+                questionType: true,
+                questionText: true,
+                difficulty: true,
+                status: true,
+                orderNumber: true,
+                competencyId: true,
+                competency: { select: { id: true, code: true, name: true } },
+                options: { select: { id: true } },
+              },
+            },
+          },
+        },
+        curriculumModules: {
+          select: {
+            competency: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    });
+    if (!world) {
+      throw new NotFoundException("Dunia tidak ditemukan.");
+    }
+
+    const competencies = world.curriculumModules
+      .map((module) => module.competency)
+      .filter((competency): competency is { id: string; code: string; name: string } => Boolean(competency));
+
+    return {
+      world: { id: world.id, key: world.key, name: world.name },
+      quests: world.quests.map((quest) => ({
+        id: quest.id,
+        code: quest.code,
+        title: quest.title,
+        status: quest.status,
+      })),
+      competencies,
+      questions: world.quests.flatMap((quest) =>
+        quest.questions.map((question) => ({
+          ...question,
+          quest: { id: quest.id, code: quest.code, title: quest.title },
+          optionCount: question.options.length,
+        })),
+      ),
+    };
+  }
+
+  async createQuestQuestion(questId: string, input: QuestQuestionInput) {
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) {
+      throw new NotFoundException("Quest tidak ditemukan.");
+    }
+    if (!input.competencyId) {
+      throw new BadRequestException("Kompetensi wajib diisi.");
+    }
+
+    const orderNumber =
+      input.orderNumber ??
+      (await this.prisma.questQuestion.count({ where: { questId } })) + 1;
+    const code = input.code?.trim() || `${quest.code}-Q${String(orderNumber).padStart(3, "0")}`;
+
+    return this.prisma.questQuestion.create({
+      data: {
+        questId,
+        code,
+        competencyId: input.competencyId,
+        difficulty: input.difficulty,
+        instruction: input.instruction,
+        measurementCategory: input.measurementCategory,
+        orderNumber,
+        questionText: input.questionText?.trim() || "Pertanyaan belum diisi.",
+        questionType: this.parseQuestQuestionType(input.questionType),
+        status: this.parseQuestionStatus(input.status),
+        stimulusText: input.stimulusText,
+      },
+    });
+  }
+
+  async updateQuestQuestion(questionId: string, input: QuestQuestionInput) {
+    return this.prisma.questQuestion.update({
+      where: { id: questionId },
+      data: {
+        code: input.code,
+        competencyId: input.competencyId,
+        difficulty: input.difficulty,
+        instruction: input.instruction,
+        measurementCategory: input.measurementCategory,
+        orderNumber: input.orderNumber,
+        questionText: input.questionText,
+        questionType: input.questionType ? this.parseQuestQuestionType(input.questionType) : undefined,
+        status: input.status ? this.parseQuestionStatus(input.status) : undefined,
+        stimulusText: input.stimulusText,
+      },
+    });
+  }
+
+  async deleteQuestQuestion(questionId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.questQuestionOption.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questMatchingPair.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questOrderItem.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questAcceptedAnswer.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questRubricCriterion.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questMedia.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questHotspotArea.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questEvidenceItem.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questCodeConfig.deleteMany({ where: { questQuestionId: questionId } });
+      return tx.questQuestion.delete({ where: { id: questionId } });
+    });
+  }
+
   private async ensureCurriculumModule(moduleId: string) {
     const module = await this.prisma.curriculumModule.findUnique({
       where: { id: moduleId },
@@ -535,6 +698,24 @@ export class WorldsService {
       throw new BadRequestException("Tipe materi tidak valid.");
     }
     return type as CurriculumLessonType;
+  }
+
+  private parseQuestQuestionType(type?: string) {
+    const fallback = QuestQuestionType.SINGLE_CHOICE;
+    if (!type) return fallback;
+    if (!Object.values(QuestQuestionType).includes(type as QuestQuestionType)) {
+      throw new BadRequestException("Tipe pertanyaan tidak valid.");
+    }
+    return type as QuestQuestionType;
+  }
+
+  private parseQuestionStatus(status?: string) {
+    const fallback = QuestionStatus.DRAFT;
+    if (!status) return fallback;
+    if (!Object.values(QuestionStatus).includes(status as QuestionStatus)) {
+      throw new BadRequestException("Status pertanyaan tidak valid.");
+    }
+    return status as QuestionStatus;
   }
 
   private getStudentProfileId(currentUser: AuthenticatedUser) {

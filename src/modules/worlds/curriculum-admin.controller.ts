@@ -41,6 +41,19 @@ type RemedialRulePayload = {
   recommendationTitle?: string;
 };
 
+type QuestQuestionPayload = {
+  code?: string;
+  competencyId?: string;
+  difficulty?: string;
+  instruction?: string;
+  measurementCategory?: string;
+  orderNumber?: number;
+  questionText?: string;
+  questionType?: string;
+  status?: string;
+  stimulusText?: string;
+};
+
 @ApiTags("Admin Curriculum")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -73,7 +86,13 @@ export class CurriculumAdminController {
   @Get("worlds/:worldKey")
   @ResponseMessage("Kurikulum dunia berhasil diambil.")
   findByWorld(@Param("worldKey") worldKey: string) {
-    return this.worldsService.findCurriculumByWorldKey(worldKey);
+    return this.worldsService.findAdminCurriculumByWorldKey(worldKey);
+  }
+
+  @Get("worlds/:worldKey/questions")
+  @ResponseMessage("Pertanyaan dunia berhasil diambil.")
+  findQuestionsByWorld(@Param("worldKey") worldKey: string) {
+    return this.worldsService.findQuestQuestionsByWorldKey(worldKey);
   }
 
   @Post("worlds/:worldKey/modules")
@@ -86,6 +105,12 @@ export class CurriculumAdminController {
   @ResponseMessage("Modul kurikulum berhasil diperbarui.")
   updateModule(@Param("moduleId") moduleId: string, @Body() body: CurriculumModulePayload) {
     return this.worldsService.updateCurriculumModule(moduleId, body);
+  }
+
+  @Delete("modules/:moduleId")
+  @ResponseMessage("Modul kurikulum berhasil diarsipkan.")
+  deleteModule(@Param("moduleId") moduleId: string) {
+    return this.worldsService.deleteCurriculumModule(moduleId);
   }
 
   @Post("modules/:moduleId/lessons")
@@ -134,5 +159,29 @@ export class CurriculumAdminController {
   @ResponseMessage("Aturan remedial berhasil diperbarui.")
   updateRemedialRule(@Param("ruleId") ruleId: string, @Body() body: RemedialRulePayload) {
     return this.worldsService.updateRemedialRule(ruleId, body);
+  }
+
+  @Delete("remedial-rules/:ruleId")
+  @ResponseMessage("Aturan remedial berhasil dihapus.")
+  deleteRemedialRule(@Param("ruleId") ruleId: string) {
+    return this.worldsService.deleteRemedialRule(ruleId);
+  }
+
+  @Post("quests/:questId/questions")
+  @ResponseMessage("Pertanyaan quest berhasil dibuat.")
+  createQuestQuestion(@Param("questId") questId: string, @Body() body: QuestQuestionPayload) {
+    return this.worldsService.createQuestQuestion(questId, body);
+  }
+
+  @Patch("questions/:questionId")
+  @ResponseMessage("Pertanyaan quest berhasil diperbarui.")
+  updateQuestQuestion(@Param("questionId") questionId: string, @Body() body: QuestQuestionPayload) {
+    return this.worldsService.updateQuestQuestion(questionId, body);
+  }
+
+  @Delete("questions/:questionId")
+  @ResponseMessage("Pertanyaan quest berhasil dihapus.")
+  deleteQuestQuestion(@Param("questionId") questionId: string) {
+    return this.worldsService.deleteQuestQuestion(questionId);
   }
 }
