@@ -24,6 +24,7 @@ import { StudentAccountModule } from "./modules/student-account/student-account.
 import { StudentBaleVerseModule } from "./modules/student-baleverse/student-baleverse.module";
 import { StudentCasesModule } from "./modules/student-cases/student-cases.module";
 import { StudentQuestsModule } from "./modules/student-quests/student-quests.module";
+import { UsersModule } from "./modules/users/users.module";
 import { WorldsModule } from "./modules/worlds/worlds.module";
 
 @Module({
@@ -56,6 +57,7 @@ import { WorldsModule } from "./modules/worlds/worlds.module";
     StudentBaleVerseModule,
     StudentCasesModule,
     StudentQuestsModule,
+    UsersModule,
   ],
 })
 export class AppModule {}
