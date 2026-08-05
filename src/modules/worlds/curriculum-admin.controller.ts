@@ -97,6 +97,12 @@ export class CurriculumAdminController {
     return this.worldsService.curriculumReadiness();
   }
 
+  @Get("worlds")
+  @ResponseMessage("Daftar dunia kurikulum berhasil diambil.")
+  findAdminWorlds() {
+    return this.worldsService.findAllForAdmin();
+  }
+
   @Get("import-template")
   @ResponseMessage("Template import kurikulum berhasil diambil.")
   importTemplate() {

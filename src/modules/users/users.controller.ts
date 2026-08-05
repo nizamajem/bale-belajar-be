@@ -24,6 +24,12 @@ export class UsersController {
     return this.usersService.findAll(query);
   }
 
+  @Get(":id/history")
+  @ResponseMessage("History belajar user berhasil diambil.")
+  findHistory(@Param("id") id: string) {
+    return this.usersService.findHistory(id);
+  }
+
   @Post()
   @ResponseMessage("User berhasil dibuat.")
   create(@Body() dto: CreateUserDto) {

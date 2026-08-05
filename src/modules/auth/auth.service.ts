@@ -349,6 +349,19 @@ export class AuthService {
             academicYear: true,
             gradeLevel: true,
             careerPath: true,
+            onboarding: {
+              select: {
+                completedAt: true,
+                learningGoal: true,
+                learningWorld: true,
+                gradeChoice: true,
+                selfReportedLevel: true,
+                learningFormats: true,
+                dailyDuration: true,
+                studyTime: true,
+                rawAnswers: true,
+              },
+            },
             school: {
               select: { id: true, name: true, city: true },
             },
@@ -364,6 +377,7 @@ export class AuthService {
     const { additionalRoles, ...rest } = user;
     return {
       ...rest,
+      hasCompletedOnboarding: Boolean(user.studentProfile?.onboarding?.completedAt),
       // `role` di sini sengaja peran AKTIF sesi ini (dari token), bukan
       // peran utama di kolom DB - supaya FE tahu sedang "masuk sebagai" apa.
       role: currentUser.role,

@@ -189,6 +189,171 @@ export class UsersService {
     });
   }
 
+  async findHistory(id: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        studentProfile: {
+          select: {
+            id: true,
+            fullName: true,
+            gradeLevel: true,
+            onboarding: true,
+            placementAttempts: {
+              orderBy: { createdAt: "desc" },
+              include: {
+                answers: { orderBy: { createdAt: "asc" } },
+                analysis: true,
+              },
+            },
+            questAssignments: {
+              orderBy: { createdAt: "desc" },
+              include: {
+                world: { select: { key: true, name: true } },
+                quest: {
+                  select: {
+                    id: true,
+                    code: true,
+                    title: true,
+                    questions: {
+                      orderBy: { orderNumber: "asc" },
+                      select: {
+                        id: true,
+                        code: true,
+                        questionText: true,
+                        questionType: true,
+                        competency: { select: { id: true, code: true, name: true } },
+                      },
+                    },
+                  },
+                },
+                attempt: {
+                  include: {
+                    answers: {
+                      include: {
+                        question: {
+                          select: {
+                            id: true,
+                            code: true,
+                            questionText: true,
+                            questionType: true,
+                            competency: { select: { id: true, code: true, name: true } },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException("User tidak ditemukan.");
+
+    const placementQuestionCodes = user.studentProfile?.placementAttempts.flatMap((attempt) =>
+      attempt.answers.map((answer) => answer.questionId),
+    ) ?? [];
+    const placementQuestions = placementQuestionCodes.length
+      ? await this.prisma.questQuestion.findMany({
+          where: { code: { in: placementQuestionCodes } },
+          select: {
+            code: true,
+            questionText: true,
+            questionType: true,
+            competency: { select: { id: true, code: true, name: true } },
+            options: {
+              where: { isCorrect: true },
+              select: { optionId: true, label: true },
+              take: 1,
+            },
+          },
+        })
+      : [];
+    const placementQuestionByCode = new Map(placementQuestions.map((question) => [question.code, question]));
+
+    return {
+      user: {
+        id: user.id,
+        name: user.studentProfile?.fullName ?? user.name,
+        email: user.email,
+        role: user.role,
+        gradeLevel: user.studentProfile?.gradeLevel,
+      },
+      onboarding: user.studentProfile?.onboarding
+        ? {
+            completedAt: user.studentProfile.onboarding.completedAt,
+            learningGoal: user.studentProfile.onboarding.learningGoal,
+            learningWorld: user.studentProfile.onboarding.learningWorld,
+            gradeChoice: user.studentProfile.onboarding.gradeChoice,
+            selfReportedLevel: user.studentProfile.onboarding.selfReportedLevel,
+            learningFormats: user.studentProfile.onboarding.learningFormats,
+            dailyDuration: user.studentProfile.onboarding.dailyDuration,
+            studyTime: user.studentProfile.onboarding.studyTime,
+            rawAnswers: user.studentProfile.onboarding.rawAnswers,
+          }
+        : null,
+      placementAttempts: user.studentProfile?.placementAttempts.map((attempt) => ({
+        id: attempt.id,
+        worldKey: attempt.worldKey,
+        status: attempt.status,
+        startedAt: attempt.startedAt,
+        submittedAt: attempt.submittedAt,
+        totalQuestions: attempt.totalQuestions,
+        analysis: attempt.analysis,
+        answers: attempt.answers.map((answer) => {
+          const question = placementQuestionByCode.get(answer.questionId);
+          const evaluation = this.readEvaluation(answer.answer);
+          return {
+            id: answer.id,
+            questionId: answer.questionId,
+            questionText: question?.questionText ?? answer.questionId,
+            questionType: answer.questionType,
+            competency: question?.competency ?? evaluation?.competency ?? null,
+            selectedAnswer: this.readSelectedAnswer(answer.answer),
+            correctAnswer: evaluation?.correctOptionLabel ?? question?.options[0]?.label ?? null,
+            isCorrect: evaluation?.isCorrect ?? null,
+            score: evaluation?.score ?? null,
+            isSkipped: answer.isSkipped,
+            answeredAt: answer.clientAnsweredAt ?? answer.updatedAt,
+          };
+        }),
+      })) ?? [],
+      questAttempts: user.studentProfile?.questAssignments
+        .filter((assignment) => assignment.attempt)
+        .map((assignment) => ({
+          id: assignment.attempt!.id,
+          world: assignment.world,
+          quest: {
+            id: assignment.quest.id,
+            code: assignment.quest.code,
+            title: assignment.quest.title,
+          },
+          status: assignment.attempt!.status,
+          overallScore: assignment.attempt!.overallScore ? Number(assignment.attempt!.overallScore) : null,
+          submittedAt: assignment.attempt!.submittedAt,
+          answers: assignment.attempt!.answers.map((answer) => ({
+            id: answer.id,
+            questionId: answer.questQuestionId,
+            questionCode: answer.question.code,
+            questionText: answer.question.questionText,
+            questionType: answer.question.questionType,
+            competency: answer.question.competency,
+            selectedAnswer: answer.payload,
+            isCorrect: answer.isCorrect,
+            score: answer.score ? Number(answer.score) : null,
+            evaluationStatus: answer.evaluationStatus,
+            answeredAt: answer.answeredAt ?? answer.updatedAt,
+          })),
+        })) ?? [],
+    };
+  }
+
   async update(id: string, dto: UpdateUserDto) {
     const existing = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
@@ -291,5 +456,23 @@ export class UsersService {
     if (existing && existing.id !== ignoredProfileId) {
       throw new ConflictException("Kode peserta sudah digunakan.");
     }
+  }
+
+  private readEvaluation(answer: Prisma.JsonValue) {
+    if (!answer || typeof answer !== "object" || Array.isArray(answer)) return null;
+    const evaluation = (answer as Record<string, unknown>).evaluation;
+    if (!evaluation || typeof evaluation !== "object" || Array.isArray(evaluation)) return null;
+    return evaluation as {
+      competency?: { id: string; code: string; name: string } | null;
+      correctOptionLabel?: string | null;
+      isCorrect?: boolean | null;
+      score?: number | null;
+    };
+  }
+
+  private readSelectedAnswer(answer: Prisma.JsonValue) {
+    if (!answer || typeof answer !== "object" || Array.isArray(answer)) return answer;
+    const payload = answer as Record<string, unknown>;
+    return payload.selectedOptionId ?? payload.value ?? payload;
   }
 }

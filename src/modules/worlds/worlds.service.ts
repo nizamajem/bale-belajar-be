@@ -221,6 +221,29 @@ export class WorldsService {
     };
   }
 
+  async findAllForAdmin() {
+    return this.prisma.world.findMany({
+      where: { isActive: true },
+      orderBy: [{ orderNumber: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        characterClass: true,
+        themeDescription: true,
+        orderNumber: true,
+        subject: { select: { id: true, code: true, name: true } },
+        _count: {
+          select: {
+            chapters: true,
+            quests: true,
+            curriculumModules: true,
+          },
+        },
+      },
+    });
+  }
+
   async findAllForStudent(currentUser: AuthenticatedUser) {
     const studentProfileId = this.getStudentProfileId(currentUser);
 
