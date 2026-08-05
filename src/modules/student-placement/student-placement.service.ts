@@ -40,6 +40,20 @@ export class StudentPlacementService {
     });
   }
 
+  async getQuestions(currentUser: AuthenticatedUser) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    const student = await this.prisma.studentProfile.findUnique({
+      where: { id: studentProfileId },
+      include: { onboarding: true },
+    });
+    const worldKey = await this.resolveWorldKey(student?.onboarding?.learningWorld);
+    const templates = await this.getPlacementQuestionTemplates(worldKey);
+    return {
+      totalQuestions: templates.length,
+      questions: templates.map((template) => template.payload),
+    };
+  }
+
   async saveAnswer(
     currentUser: AuthenticatedUser,
     attemptId: string,
@@ -204,20 +218,41 @@ export class StudentPlacementService {
 
   private async getPlacementTotal(worldKey?: string | null) {
     const normalizedWorldKey = await this.resolveWorldKey(worldKey);
-    const worldSpecific = await this.prisma.placementQuestionTemplate.count({
-      where: { isActive: true, worldKey: normalizedWorldKey },
+    return (await this.getPlacementQuestionTemplates(normalizedWorldKey)).length;
+  }
+
+  private async getPlacementQuestionTemplates(worldKey?: string | null) {
+    const templates = await this.prisma.placementQuestionTemplate.findMany({
+      where: {
+        isActive: true,
+        OR: [{ worldKey }, { worldKey: null }],
+      },
+      orderBy: { orderNumber: "asc" },
     });
-    if (worldSpecific > 0) return worldSpecific;
-    return this.prisma.placementQuestionTemplate.count({
+    if (templates.length > 0) return templates;
+    return this.prisma.placementQuestionTemplate.findMany({
       where: { isActive: true },
+      orderBy: { orderNumber: "asc" },
     });
   }
 
   private async resolveWorldKey(worldKey?: string | null) {
     const normalized = worldKey?.toLowerCase();
-    if (normalized) {
+    const aliases: Record<string, string> = {
+      sains: "scientia",
+      science: "scientia",
+      scientia: "scientia",
+      try_all: "scientia",
+      tryall: "scientia",
+      numeria: "numeria",
+      kodex: "kodex",
+      detectivia: "detectivia",
+      bahasa: "bahasa",
+    };
+    const candidate = normalized ? aliases[normalized] ?? normalized : undefined;
+    if (candidate) {
       const existing = await this.prisma.world.findUnique({
-        where: { key: normalized },
+        where: { key: candidate },
         select: { key: true },
       });
       if (existing) return existing.key;
@@ -228,7 +263,7 @@ export class StudentPlacementService {
       orderBy: { orderNumber: "asc" },
       select: { key: true },
     });
-    return firstWorld?.key ?? normalized ?? "scientia";
+    return firstWorld?.key ?? candidate ?? "scientia";
   }
 
   private async firstMission(worldKey: string) {

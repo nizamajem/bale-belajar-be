@@ -43,6 +43,12 @@ export class StudentPlacementController {
     return this.service.getLatest(currentUser);
   }
 
+  @Get("questions")
+  @ResponseMessage("Pertanyaan cek awal berhasil diambil.")
+  getQuestions(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.service.getQuestions(currentUser);
+  }
+
   @Put(":attemptId/answers/:questionId")
   @ResponseMessage("Jawaban cek awal berhasil disimpan.")
   saveAnswer(

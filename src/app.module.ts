@@ -21,6 +21,7 @@ import { StudentOnboardingModule } from "./modules/student-onboarding/student-on
 import { StudentPlacementModule } from "./modules/student-placement/student-placement.module";
 import { StudentPrototypeModule } from "./modules/student-prototype/student-prototype.module";
 import { StudentAccountModule } from "./modules/student-account/student-account.module";
+import { StudentBaleVerseModule } from "./modules/student-baleverse/student-baleverse.module";
 import { StudentCasesModule } from "./modules/student-cases/student-cases.module";
 import { StudentQuestsModule } from "./modules/student-quests/student-quests.module";
 import { WorldsModule } from "./modules/worlds/worlds.module";
@@ -52,6 +53,7 @@ import { WorldsModule } from "./modules/worlds/worlds.module";
     StudentPlacementModule,
     StudentPrototypeModule,
     StudentAccountModule,
+    StudentBaleVerseModule,
     StudentCasesModule,
     StudentQuestsModule,
   ],

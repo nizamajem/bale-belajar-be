@@ -48,6 +48,12 @@ type RemedialRulePayload = {
 export class CurriculumAdminController {
   constructor(private readonly worldsService: WorldsService) {}
 
+  @Get("readiness")
+  @ResponseMessage("Kesiapan kurikulum berhasil dicek.")
+  readiness() {
+    return this.worldsService.curriculumReadiness();
+  }
+
   @Get("worlds/:worldKey")
   @ResponseMessage("Kurikulum dunia berhasil diambil.")
   findByWorld(@Param("worldKey") worldKey: string) {

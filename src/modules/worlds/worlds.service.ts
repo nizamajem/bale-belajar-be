@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { CurriculumLessonType } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
@@ -36,15 +41,156 @@ type RemedialRuleInput = {
   recommendationTitle?: string;
 };
 
+const MIN_ACTIVE_QUESTS_PER_WORLD = 5;
+const MIN_ACTIVE_QUESTIONS = 20;
+const REQUIRED_PLACEMENT_TYPES = [
+  "SINGLE_CHOICE",
+  "MULTIPLE_SELECT",
+  "BINARY_CHOICE",
+  "SHORT_TEXT",
+  "MATCHING",
+  "ORDERING",
+  "IMAGE_CHOICE",
+  "AUDIO_CHOICE",
+  "LONG_TEXT",
+  "CODE_INPUT",
+  "IMAGE_HOTSPOT",
+  "VOICE_RESPONSE",
+  "TIMELINE_BUILDER",
+  "EVIDENCE_BOARD",
+] as const;
+
 @Injectable()
 export class WorldsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async curriculumReadiness() {
+    const [
+      worlds,
+      questCount,
+      questionCount,
+      placementTemplates,
+      mediaCount,
+      hotspotCount,
+      evidenceCount,
+      sourceRows,
+    ] = await Promise.all([
+      this.prisma.world.findMany({
+        where: { isActive: true },
+        include: {
+          subject: { select: { name: true } },
+          _count: {
+            select: {
+              chapters: true,
+              quests: { where: { status: "ACTIVE" } },
+            },
+          },
+        },
+        orderBy: { orderNumber: "asc" },
+      }),
+      this.prisma.quest.count({ where: { status: "ACTIVE" } }),
+      this.prisma.questQuestion.count({ where: { status: "ACTIVE" } }),
+      this.prisma.placementQuestionTemplate.findMany({
+        where: { isActive: true },
+        orderBy: { orderNumber: "asc" },
+        select: { orderNumber: true, questionType: true, prompt: true },
+      }),
+      this.prisma.questMedia.count(),
+      this.prisma.questHotspotArea.count(),
+      this.prisma.questEvidenceItem.count(),
+      this.prisma.curriculumSourceRecord.count(),
+    ]);
+
+    const worldsWithoutEnoughQuests = worlds
+      .filter((world) => world._count.quests < MIN_ACTIVE_QUESTS_PER_WORLD)
+      .map((world) => ({ key: world.key, quests: world._count.quests }));
+    const worldsWithoutChapters = worlds
+      .filter((world) => world._count.chapters === 0)
+      .map((world) => world.key);
+    const placementTypes = new Set(
+      placementTemplates.map((template) => template.questionType),
+    );
+    const missingPlacementTypes = REQUIRED_PLACEMENT_TYPES.filter(
+      (type) => !placementTypes.has(type),
+    );
+    const duplicatePlacementTypes = [...placementTypes]
+      .map((type) => ({
+        type,
+        count: placementTemplates.filter(
+          (template) => template.questionType === type,
+        ).length,
+      }))
+      .filter((item) => item.count > 1);
+
+    const blockers = [
+      ...(worlds.length === 0 ? ["Belum ada world aktif."] : []),
+      ...(questCount === 0 ? ["Belum ada quest aktif."] : []),
+      ...(questionCount < MIN_ACTIVE_QUESTIONS
+        ? [
+            `Pertanyaan aktif baru ${questionCount}; minimal produksi ${MIN_ACTIVE_QUESTIONS}.`,
+          ]
+        : []),
+      ...worldsWithoutEnoughQuests.map(
+        (world) =>
+          `World ${world.key} baru punya ${world.quests} quest aktif; minimal ${MIN_ACTIVE_QUESTS_PER_WORLD}.`,
+      ),
+      ...worldsWithoutChapters.map(
+        (key) => `World ${key} belum punya chapter.`,
+      ),
+      ...(placementTemplates.length === 0
+        ? ["Template placement belum tersedia."]
+        : []),
+      ...missingPlacementTypes.map(
+        (type) => `Template placement ${type} belum tersedia.`,
+      ),
+      ...duplicatePlacementTypes.map(
+        (item) =>
+          `Template placement ${item.type} duplikat ${item.count} kali.`,
+      ),
+    ];
+
+    return {
+      ready: blockers.length === 0,
+      policy: {
+        minActiveQuestsPerWorld: MIN_ACTIVE_QUESTS_PER_WORLD,
+        minActiveQuestions: MIN_ACTIVE_QUESTIONS,
+        requiredPlacementTypes: REQUIRED_PLACEMENT_TYPES,
+      },
+      counts: {
+        sourceRows,
+        worlds: worlds.length,
+        activeQuests: questCount,
+        activeQuestQuestions: questionCount,
+        placementTemplates: placementTemplates.length,
+        media: mediaCount,
+        hotspots: hotspotCount,
+        evidenceItems: evidenceCount,
+      },
+      worlds: worlds.map((world) => ({
+        key: world.key,
+        name: world.name,
+        subject: world.subject.name,
+        chapters: world._count.chapters,
+        activeQuests: world._count.quests,
+        ready:
+          world._count.chapters > 0 &&
+          world._count.quests >= MIN_ACTIVE_QUESTS_PER_WORLD,
+      })),
+      placementTemplates,
+      missingPlacementTypes,
+      blockers,
+    };
+  }
 
   async findAllForStudent(currentUser: AuthenticatedUser) {
     const studentProfileId = this.getStudentProfileId(currentUser);
 
     const worlds = await this.prisma.world.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        quests: { some: { status: "ACTIVE" } },
+        chapters: { some: {} },
+      },
       include: {
         subject: { select: { id: true, code: true, name: true } },
         worldProgress: {
@@ -92,7 +238,9 @@ export class WorldsService {
             lessons: { orderBy: { orderNumber: "asc" } },
             caseStudies: { orderBy: { orderNumber: "asc" } },
             remedialRules: {
-              include: { competency: { select: { id: true, code: true, name: true } } },
+              include: {
+                competency: { select: { id: true, code: true, name: true } },
+              },
             },
           },
         },
@@ -166,7 +314,9 @@ export class WorldsService {
       if (!module.competency) return false;
       const mastery = masteryByCompetency.get(module.competency.id);
       if (!mastery) return true;
-      return Number(mastery.masteryScore) < 60 || mastery.status === "NEEDS_PRACTICE";
+      return (
+        Number(mastery.masteryScore) < 60 || mastery.status === "NEEDS_PRACTICE"
+      );
     });
     const targetModule = weakModule ?? firstModule;
     const targetMastery = targetModule?.competency
@@ -174,7 +324,8 @@ export class WorldsService {
       : null;
     const needsRemedial = Boolean(
       targetMastery &&
-        (Number(targetMastery.masteryScore) < 60 || targetMastery.status === "NEEDS_PRACTICE"),
+      (Number(targetMastery.masteryScore) < 60 ||
+        targetMastery.status === "NEEDS_PRACTICE"),
     );
 
     return {
@@ -183,7 +334,11 @@ export class WorldsService {
         name: curriculum.name,
         characterClass: curriculum.characterClass,
       },
-      nextAction: needsRemedial ? "REMEDIAL" : targetMastery ? "NEXT_MODULE" : "START_MODULE",
+      nextAction: needsRemedial
+        ? "REMEDIAL"
+        : targetMastery
+          ? "NEXT_MODULE"
+          : "START_MODULE",
       title: needsRemedial
         ? "Ulangi bagian yang belum kuat"
         : targetMastery
@@ -206,20 +361,25 @@ export class WorldsService {
   }
 
   async createCurriculumModule(worldKey: string, input: CurriculumModuleInput) {
-    const world = await this.prisma.world.findUnique({ where: { key: worldKey } });
+    const world = await this.prisma.world.findUnique({
+      where: { key: worldKey },
+    });
     if (!world || !world.isActive) {
       throw new NotFoundException("Dunia tidak ditemukan.");
     }
 
     const orderNumber =
       input.orderNumber ??
-      ((await this.prisma.curriculumModule.count({ where: { worldId: world.id } })) + 1);
+      (await this.prisma.curriculumModule.count({
+        where: { worldId: world.id },
+      })) + 1;
     const title = input.title?.trim() || "Modul Baru";
 
     return this.prisma.curriculumModule.create({
       data: {
         worldId: world.id,
-        slug: input.slug?.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        slug:
+          input.slug?.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         title,
         simpleGoal: input.simpleGoal?.trim() || "Tujuan modul belum diisi.",
         bigIdea: input.bigIdea,
@@ -248,7 +408,7 @@ export class WorldsService {
     await this.ensureCurriculumModule(moduleId);
     const orderNumber =
       input.orderNumber ??
-      ((await this.prisma.curriculumLesson.count({ where: { moduleId } })) + 1);
+      (await this.prisma.curriculumLesson.count({ where: { moduleId } })) + 1;
 
     return this.prisma.curriculumLesson.create({
       data: {
@@ -281,11 +441,15 @@ export class WorldsService {
     return this.prisma.curriculumLesson.delete({ where: { id: lessonId } });
   }
 
-  async createCurriculumCaseStudy(moduleId: string, input: CurriculumCaseStudyInput) {
+  async createCurriculumCaseStudy(
+    moduleId: string,
+    input: CurriculumCaseStudyInput,
+  ) {
     await this.ensureCurriculumModule(moduleId);
     const orderNumber =
       input.orderNumber ??
-      ((await this.prisma.curriculumCaseStudy.count({ where: { moduleId } })) + 1);
+      (await this.prisma.curriculumCaseStudy.count({ where: { moduleId } })) +
+        1;
 
     return this.prisma.curriculumCaseStudy.create({
       data: {
@@ -294,12 +458,16 @@ export class WorldsService {
         title: input.title?.trim() || "Studi Kasus Baru",
         story: input.story?.trim() || "Cerita kasus belum diisi.",
         analysisSteps: input.analysisSteps ?? [],
-        commonMistake: input.commonMistake?.trim() || "Kesalahan umum belum diisi.",
+        commonMistake:
+          input.commonMistake?.trim() || "Kesalahan umum belum diisi.",
       },
     });
   }
 
-  async updateCurriculumCaseStudy(caseStudyId: string, input: CurriculumCaseStudyInput) {
+  async updateCurriculumCaseStudy(
+    caseStudyId: string,
+    input: CurriculumCaseStudyInput,
+  ) {
     return this.prisma.curriculumCaseStudy.update({
       where: { id: caseStudyId },
       data: {
@@ -313,7 +481,9 @@ export class WorldsService {
   }
 
   async deleteCurriculumCaseStudy(caseStudyId: string) {
-    return this.prisma.curriculumCaseStudy.delete({ where: { id: caseStudyId } });
+    return this.prisma.curriculumCaseStudy.delete({
+      where: { id: caseStudyId },
+    });
   }
 
   async createRemedialRule(moduleId: string, input: RemedialRuleInput) {
@@ -346,15 +516,22 @@ export class WorldsService {
   }
 
   private async ensureCurriculumModule(moduleId: string) {
-    const module = await this.prisma.curriculumModule.findUnique({ where: { id: moduleId } });
-    if (!module) throw new NotFoundException("Modul kurikulum tidak ditemukan.");
+    const module = await this.prisma.curriculumModule.findUnique({
+      where: { id: moduleId },
+    });
+    if (!module)
+      throw new NotFoundException("Modul kurikulum tidak ditemukan.");
     return module;
   }
 
   private parseLessonType(type?: string) {
     const fallback = CurriculumLessonType.CONCEPT;
     if (!type) return fallback;
-    if (!Object.values(CurriculumLessonType).includes(type as CurriculumLessonType)) {
+    if (
+      !Object.values(CurriculumLessonType).includes(
+        type as CurriculumLessonType,
+      )
+    ) {
       throw new BadRequestException("Tipe materi tidak valid.");
     }
     return type as CurriculumLessonType;
