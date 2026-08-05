@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsOptional } from "class-validator";
+import { UserStatus } from "@prisma/client";
+import { IsEnum, IsIn, IsOptional, IsString } from "class-validator";
 import { PaginationQueryDto } from "../../../common/dto/pagination-query.dto";
 
 export class UsersQueryDto extends PaginationQueryDto {
@@ -7,4 +8,19 @@ export class UsersQueryDto extends PaginationQueryDto {
   @IsOptional()
   @IsIn(["STUDENT", "TEACHER", "PARENT"])
   role?: "STUDENT" | "TEACHER" | "PARENT";
+
+  @ApiPropertyOptional({ example: "aulia@example.com" })
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @ApiPropertyOptional({ example: "62812" })
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @ApiPropertyOptional({ enum: UserStatus })
+  @IsOptional()
+  @IsEnum(UserStatus)
+  status?: UserStatus;
 }
