@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { CurriculumLessonType, QuestionStatus, QuestQuestionType } from "@prisma/client";
+import { CurriculumLessonType, MissionStatus, QuestionStatus, QuestQuestionType } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
 
@@ -52,6 +52,32 @@ type QuestQuestionInput = {
   questionType?: string;
   status?: string;
   stimulusText?: string;
+};
+
+type ChapterInput = {
+  chapterCode?: string;
+  chapterNumber?: number;
+  difficulty?: string;
+  estimatedDurationDays?: number;
+  goal?: string;
+  recommendedSessions?: number;
+  status?: string;
+  story?: string;
+  subWorldKey?: string;
+  subWorldName?: string;
+  title?: string;
+};
+
+type QuestInput = {
+  code?: string;
+  estimatedMinutes?: number;
+  missionType?: string;
+  objective?: string;
+  status?: string;
+  story?: string;
+  studentInstruction?: string;
+  title?: string;
+  xpRewardFirst?: number;
 };
 
 const MIN_ACTIVE_QUESTS_PER_WORLD = 5;
@@ -580,9 +606,9 @@ export class WorldsService {
             },
           },
         },
-        curriculumModules: {
+        chapters: {
           select: {
-            competency: { select: { id: true, code: true, name: true } },
+            competencies: { select: { id: true, code: true, name: true } },
           },
         },
       },
@@ -591,9 +617,7 @@ export class WorldsService {
       throw new NotFoundException("Dunia tidak ditemukan.");
     }
 
-    const competencies = world.curriculumModules
-      .map((module) => module.competency)
-      .filter((competency): competency is { id: string; code: string; name: string } => Boolean(competency));
+    const competencies = world.chapters.flatMap((chapter) => chapter.competencies);
 
     return {
       world: { id: world.id, key: world.key, name: world.name },
@@ -612,6 +636,152 @@ export class WorldsService {
         })),
       ),
     };
+  }
+
+  async findImportedCurriculumByWorldKey(worldKey: string) {
+    const world = await this.prisma.world.findUnique({
+      where: { key: worldKey },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        chapters: {
+          orderBy: { chapterNumber: "asc" },
+          select: {
+            id: true,
+            chapterCode: true,
+            chapterNumber: true,
+            title: true,
+            story: true,
+            difficulty: true,
+            estimatedDurationDays: true,
+            recommendedSessions: true,
+            goal: true,
+            status: true,
+            subWorldKey: true,
+            subWorldName: true,
+            competencies: { select: { id: true, code: true, name: true } },
+            quests: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                code: true,
+                title: true,
+                missionType: true,
+                objective: true,
+                studentInstruction: true,
+                estimatedMinutes: true,
+                xpRewardFirst: true,
+                status: true,
+                _count: { select: { questions: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!world) {
+      throw new NotFoundException("Dunia tidak ditemukan.");
+    }
+    return world;
+  }
+
+  async createChapter(worldKey: string, input: ChapterInput) {
+    const world = await this.prisma.world.findUnique({ where: { key: worldKey } });
+    if (!world) throw new NotFoundException("Dunia tidak ditemukan.");
+    const chapterNumber =
+      input.chapterNumber ??
+      (await this.prisma.chapter.count({ where: { worldId: world.id } })) + 1;
+    const code = input.chapterCode?.trim() || `${world.key.toUpperCase()}_CH${String(chapterNumber).padStart(2, "0")}`;
+    return this.prisma.chapter.create({
+      data: {
+        worldId: world.id,
+        chapterCode: code,
+        chapterNumber,
+        difficulty: input.difficulty,
+        estimatedDurationDays: input.estimatedDurationDays,
+        goal: input.goal,
+        recommendedSessions: input.recommendedSessions,
+        status: this.parseMissionStatus(input.status),
+        story: input.story,
+        subWorldKey: input.subWorldKey,
+        subWorldName: input.subWorldName,
+        title: input.title?.trim() || "Kurikulum Baru",
+      },
+    });
+  }
+
+  async updateChapter(chapterId: string, input: ChapterInput) {
+    return this.prisma.chapter.update({
+      where: { id: chapterId },
+      data: {
+        chapterCode: input.chapterCode,
+        chapterNumber: input.chapterNumber,
+        difficulty: input.difficulty,
+        estimatedDurationDays: input.estimatedDurationDays,
+        goal: input.goal,
+        recommendedSessions: input.recommendedSessions,
+        status: input.status ? this.parseMissionStatus(input.status) : undefined,
+        story: input.story,
+        subWorldKey: input.subWorldKey,
+        subWorldName: input.subWorldName,
+        title: input.title,
+      },
+    });
+  }
+
+  async deleteChapter(chapterId: string) {
+    return this.prisma.chapter.update({
+      where: { id: chapterId },
+      data: { status: MissionStatus.ARCHIVED },
+    });
+  }
+
+  async createQuest(chapterId: string, input: QuestInput) {
+    const chapter = await this.prisma.chapter.findUnique({ where: { id: chapterId } });
+    if (!chapter) throw new NotFoundException("Kurikulum tidak ditemukan.");
+    const count = await this.prisma.quest.count({ where: { chapterId } });
+    const code = input.code?.trim() || `${chapter.chapterCode}_M${String(count + 1).padStart(3, "0")}`;
+    return this.prisma.quest.create({
+      data: {
+        chapterId,
+        worldId: chapter.worldId,
+        code,
+        estimatedMinutes: input.estimatedMinutes ?? 10,
+        missionType: input.missionType,
+        objective: input.objective,
+        status: this.parseMissionStatus(input.status),
+        story: input.story,
+        studentInstruction: input.studentInstruction,
+        title: input.title?.trim() || "Misi Baru",
+        xpRewardFirst: input.xpRewardFirst ?? 0,
+        hints: [],
+      },
+    });
+  }
+
+  async updateQuest(questId: string, input: QuestInput) {
+    return this.prisma.quest.update({
+      where: { id: questId },
+      data: {
+        code: input.code,
+        estimatedMinutes: input.estimatedMinutes,
+        missionType: input.missionType,
+        objective: input.objective,
+        status: input.status ? this.parseMissionStatus(input.status) : undefined,
+        story: input.story,
+        studentInstruction: input.studentInstruction,
+        title: input.title,
+        xpRewardFirst: input.xpRewardFirst,
+      },
+    });
+  }
+
+  async deleteQuest(questId: string) {
+    return this.prisma.quest.update({
+      where: { id: questId },
+      data: { status: MissionStatus.ARCHIVED },
+    });
   }
 
   async createQuestQuestion(questId: string, input: QuestQuestionInput) {
@@ -716,6 +886,15 @@ export class WorldsService {
       throw new BadRequestException("Status pertanyaan tidak valid.");
     }
     return status as QuestionStatus;
+  }
+
+  private parseMissionStatus(status?: string) {
+    const fallback = MissionStatus.ACTIVE;
+    if (!status) return fallback;
+    if (!Object.values(MissionStatus).includes(status as MissionStatus)) {
+      throw new BadRequestException("Status tidak valid.");
+    }
+    return status as MissionStatus;
   }
 
   private getStudentProfileId(currentUser: AuthenticatedUser) {

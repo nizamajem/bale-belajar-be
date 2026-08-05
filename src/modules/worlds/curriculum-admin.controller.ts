@@ -54,6 +54,32 @@ type QuestQuestionPayload = {
   stimulusText?: string;
 };
 
+type ChapterPayload = {
+  chapterCode?: string;
+  chapterNumber?: number;
+  difficulty?: string;
+  estimatedDurationDays?: number;
+  goal?: string;
+  recommendedSessions?: number;
+  status?: string;
+  story?: string;
+  subWorldKey?: string;
+  subWorldName?: string;
+  title?: string;
+};
+
+type QuestPayload = {
+  code?: string;
+  estimatedMinutes?: number;
+  missionType?: string;
+  objective?: string;
+  status?: string;
+  story?: string;
+  studentInstruction?: string;
+  title?: string;
+  xpRewardFirst?: number;
+};
+
 @ApiTags("Admin Curriculum")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -93,6 +119,48 @@ export class CurriculumAdminController {
   @ResponseMessage("Pertanyaan dunia berhasil diambil.")
   findQuestionsByWorld(@Param("worldKey") worldKey: string) {
     return this.worldsService.findQuestQuestionsByWorldKey(worldKey);
+  }
+
+  @Get("worlds/:worldKey/imported")
+  @ResponseMessage("Kurikulum hasil import berhasil diambil.")
+  findImportedByWorld(@Param("worldKey") worldKey: string) {
+    return this.worldsService.findImportedCurriculumByWorldKey(worldKey);
+  }
+
+  @Post("worlds/:worldKey/chapters")
+  @ResponseMessage("Kurikulum berhasil dibuat.")
+  createChapter(@Param("worldKey") worldKey: string, @Body() body: ChapterPayload) {
+    return this.worldsService.createChapter(worldKey, body);
+  }
+
+  @Patch("chapters/:chapterId")
+  @ResponseMessage("Kurikulum berhasil diperbarui.")
+  updateChapter(@Param("chapterId") chapterId: string, @Body() body: ChapterPayload) {
+    return this.worldsService.updateChapter(chapterId, body);
+  }
+
+  @Delete("chapters/:chapterId")
+  @ResponseMessage("Kurikulum berhasil diarsipkan.")
+  deleteChapter(@Param("chapterId") chapterId: string) {
+    return this.worldsService.deleteChapter(chapterId);
+  }
+
+  @Post("chapters/:chapterId/quests")
+  @ResponseMessage("Misi berhasil dibuat.")
+  createQuest(@Param("chapterId") chapterId: string, @Body() body: QuestPayload) {
+    return this.worldsService.createQuest(chapterId, body);
+  }
+
+  @Patch("quests/:questId")
+  @ResponseMessage("Misi berhasil diperbarui.")
+  updateQuest(@Param("questId") questId: string, @Body() body: QuestPayload) {
+    return this.worldsService.updateQuest(questId, body);
+  }
+
+  @Delete("quests/:questId")
+  @ResponseMessage("Misi berhasil diarsipkan.")
+  deleteQuest(@Param("questId") questId: string) {
+    return this.worldsService.deleteQuest(questId);
   }
 
   @Post("worlds/:worldKey/modules")
