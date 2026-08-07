@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { UserRole } from "@prisma/client";
 import { ResponseMessage } from "../../common/decorators/response-message.decorator";
@@ -151,6 +151,19 @@ export class CurriculumAdminController {
     return this.worldsService.deleteChapter(chapterId);
   }
 
+  // Beda dari deleteChapter di atas (arsip, bisa dibatalkan) - ini hapus
+  // permanen dari database, termasuk progres siswa di bawahnya. Kirim
+  // ?force=true untuk tetap lanjut walau sudah ada siswa yang mengerjakan
+  // (endpoint menolak dengan 400 dulu kalau force tidak dikirim).
+  @Delete("chapters/:chapterId/permanent")
+  @ResponseMessage("Kurikulum berhasil dihapus permanen.")
+  permanentlyDeleteChapter(
+    @Param("chapterId") chapterId: string,
+    @Query("force") force?: string,
+  ) {
+    return this.worldsService.permanentlyDeleteChapter(chapterId, force === "true");
+  }
+
   @Post("chapters/:chapterId/quests")
   @ResponseMessage("Misi berhasil dibuat.")
   createQuest(@Param("chapterId") chapterId: string, @Body() body: QuestPayload) {
@@ -167,6 +180,17 @@ export class CurriculumAdminController {
   @ResponseMessage("Misi berhasil diarsipkan.")
   deleteQuest(@Param("questId") questId: string) {
     return this.worldsService.deleteQuest(questId);
+  }
+
+  // Sama seperti permanentlyDeleteChapter di atas, tapi lingkupnya satu
+  // Quest saja.
+  @Delete("quests/:questId/permanent")
+  @ResponseMessage("Misi berhasil dihapus permanen.")
+  permanentlyDeleteQuest(
+    @Param("questId") questId: string,
+    @Query("force") force?: string,
+  ) {
+    return this.worldsService.permanentlyDeleteQuest(questId, force === "true");
   }
 
   @Post("worlds/:worldKey/modules")

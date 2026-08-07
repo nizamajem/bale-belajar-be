@@ -890,6 +890,45 @@ export class WorldsService {
     });
   }
 
+  /**
+   * Beda dari deleteChapter() di atas (arsip, reversibel) - ini hapus
+   * Chapter beserta semua Quest/QuestQuestion di bawahnya dari database
+   * secara permanen, termasuk riwayat pengerjaan siswa (QuestAssignment/
+   * QuestAttempt/QuestAnswer). Kalau sudah ada siswa yang mengerjakan dan
+   * `force` tidak di-set true, ditolak dulu supaya admin sadar konsekuensinya
+   * sebelum data hilang tanpa bisa dikembalikan.
+   */
+  async permanentlyDeleteChapter(chapterId: string, force = false) {
+    const chapter = await this.prisma.chapter.findUnique({ where: { id: chapterId } });
+    if (!chapter) throw new NotFoundException("Kurikulum tidak ditemukan.");
+
+    const quests = await this.prisma.quest.findMany({
+      where: { chapterId },
+      select: { id: true },
+    });
+
+    if (!force) {
+      const assignmentCount = await this.prisma.questAssignment.count({
+        where: { questId: { in: quests.map((quest) => quest.id) } },
+      });
+      if (assignmentCount > 0) {
+        throw new BadRequestException(
+          `Ada ${assignmentCount} progres siswa di bawah kurikulum ini. Data itu akan hilang permanen. Konfirmasi ulang (force) untuk tetap menghapus.`,
+        );
+      }
+    }
+
+    for (const quest of quests) {
+      await this.permanentlyDeleteQuest(quest.id, true);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.competency.updateMany({ where: { chapterId }, data: { chapterId: null } });
+      await tx.chapter.updateMany({ where: { prerequisiteChapterId: chapterId }, data: { prerequisiteChapterId: null } });
+      await tx.chapter.delete({ where: { id: chapterId } });
+    });
+  }
+
   async createQuest(chapterId: string, input: QuestInput) {
     const chapter = await this.prisma.chapter.findUnique({ where: { id: chapterId } });
     if (!chapter) throw new NotFoundException("Kurikulum tidak ditemukan.");
@@ -934,6 +973,53 @@ export class WorldsService {
     return this.prisma.quest.update({
       where: { id: questId },
       data: { status: MissionStatus.ARCHIVED },
+    });
+  }
+
+  /**
+   * Beda dari deleteQuest() di atas (arsip, reversibel) - ini hapus Quest
+   * beserta semua QuestQuestion (dan 9 tabel anak tipe-soalnya) plus
+   * riwayat pengerjaan siswa (QuestAssignment/QuestAttempt/QuestAnswer)
+   * secara permanen dari database. Lihat catatan `force` di
+   * permanentlyDeleteChapter() - guard yang sama berlaku di sini.
+   */
+  async permanentlyDeleteQuest(questId: string, force = false) {
+    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    if (!quest) throw new NotFoundException("Misi tidak ditemukan.");
+
+    if (!force) {
+      const assignmentCount = await this.prisma.questAssignment.count({ where: { questId } });
+      if (assignmentCount > 0) {
+        throw new BadRequestException(
+          `Misi ini sudah dikerjakan ${assignmentCount} kali oleh siswa. Progres itu akan hilang permanen. Konfirmasi ulang (force) untuk tetap menghapus.`,
+        );
+      }
+    }
+
+    const questions = await this.prisma.questQuestion.findMany({
+      where: { questId },
+      select: { id: true },
+    });
+    const questionIds = questions.map((question) => question.id);
+
+    await this.prisma.$transaction(async (tx) => {
+      if (questionIds.length > 0) {
+        await tx.questAnswer.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questQuestionOption.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questMatchingPair.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questOrderItem.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questAcceptedAnswer.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questRubricCriterion.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questMedia.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questHotspotArea.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questEvidenceItem.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questCodeConfig.deleteMany({ where: { questQuestionId: { in: questionIds } } });
+        await tx.questQuestion.deleteMany({ where: { id: { in: questionIds } } });
+      }
+
+      await tx.questAttempt.deleteMany({ where: { assignment: { questId } } });
+      await tx.questAssignment.deleteMany({ where: { questId } });
+      await tx.quest.delete({ where: { id: questId } });
     });
   }
 
@@ -988,6 +1074,11 @@ export class WorldsService {
 
   async deleteQuestQuestion(questionId: string) {
     return this.prisma.$transaction(async (tx) => {
+      // Kalau soal ini sudah pernah dijawab siswa, QuestAnswer masih
+      // mereferensikan questionId ini - tanpa dibersihkan dulu, delete di
+      // bawah akan gagal kena constraint FK. Ini permanent delete (bukan
+      // arsip), jadi jawaban siswa untuk soal ini memang ikut hilang.
+      await tx.questAnswer.deleteMany({ where: { questQuestionId: questionId } });
       await tx.questQuestionOption.deleteMany({ where: { questQuestionId: questionId } });
       await tx.questMatchingPair.deleteMany({ where: { questQuestionId: questionId } });
       await tx.questOrderItem.deleteMany({ where: { questQuestionId: questionId } });
