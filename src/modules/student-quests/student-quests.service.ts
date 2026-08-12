@@ -83,10 +83,10 @@ export class StudentQuestsService {
 
     if (
       assignment &&
-      assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS &&
-      assignment.attempt?.status !== AttemptStatus.SUBMITTED
+      assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS
     ) {
-      const replacementQuest = await this.pickQuestForToday(world.id, assignment.questId);
+      const replacementQuest = await this.pickQuestForToday(world.id, assignment.questId)
+        .catch(() => this.pickQuestFromAnyReadyWorld(assignment!.questId));
       if (replacementQuest.id !== assignment.questId) {
         await this.prisma.$transaction(async (tx) => {
           if (assignment?.attempt) {
@@ -96,6 +96,7 @@ export class StudentQuestsService {
           await tx.questAssignment.update({
             where: { id: assignment!.id },
             data: {
+              worldId: replacementQuest.worldId,
               questId: replacementQuest.id,
               status: AssignmentStatus.ASSIGNED,
             },
@@ -105,7 +106,7 @@ export class StudentQuestsService {
           where: {
             studentProfileId_worldId_assignedDate: {
               studentProfileId,
-              worldId: world.id,
+              worldId: replacementQuest.worldId,
               assignedDate,
             },
           },
@@ -348,6 +349,31 @@ export class StudentQuestsService {
       );
     }
 
+    const dayIndex = Math.floor(Date.now() / 86_400_000);
+    return readyQuests[dayIndex % readyQuests.length];
+  }
+
+  private async pickQuestFromAnyReadyWorld(excludeQuestId?: string) {
+    const activeQuests = await this.prisma.quest.findMany({
+      where: {
+        status: MissionStatus.ACTIVE,
+        ...(excludeQuestId ? { id: { not: excludeQuestId } } : {}),
+        world: { isActive: true },
+        questions: { some: { status: "ACTIVE" } },
+      },
+      orderBy: [{ world: { orderNumber: "asc" } }, { createdAt: "asc" }],
+      include: {
+        _count: { select: { questions: { where: { status: "ACTIVE" } } } },
+      },
+    });
+    const readyQuests = activeQuests.filter(
+      (quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS,
+    );
+    if (readyQuests.length === 0) {
+      throw new NotFoundException(
+        `Belum ada quest aktif dengan minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan di semua world.`,
+      );
+    }
     const dayIndex = Math.floor(Date.now() / 86_400_000);
     return readyQuests[dayIndex % readyQuests.length];
   }
