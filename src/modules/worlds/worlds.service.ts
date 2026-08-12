@@ -370,6 +370,19 @@ export class WorldsService {
   async findAdaptivePlan(currentUser: AuthenticatedUser, worldKey: string) {
     const studentProfileId = this.getStudentProfileId(currentUser);
     const curriculum = await this.findCurriculumByWorldKey(worldKey);
+    const student = await this.prisma.studentProfile.findUnique({
+      where: { id: studentProfileId },
+      select: {
+        gradeLevel: true,
+        onboarding: true,
+        gameProfile: true,
+        placementAttempts: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          include: { analysis: true },
+        },
+      },
+    });
     const competencyIds = curriculum.modules
       .map((module) => module.competency?.id)
       .filter((id): id is string => Boolean(id));
@@ -398,6 +411,32 @@ export class WorldsService {
       (Number(targetMastery.masteryScore) < 60 ||
         targetMastery.status === "NEEDS_PRACTICE"),
     );
+    const recentAnswers = await this.prisma.questAnswer.findMany({
+      where: {
+        attempt: {
+          assignment: {
+            studentProfileId,
+            world: { key: worldKey },
+          },
+        },
+        question: { competencyId: { in: competencyIds } },
+      },
+      orderBy: { answeredAt: "desc" },
+      take: 20,
+      include: {
+        question: {
+          select: {
+            competencyId: true,
+            competency: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    });
+    const answeredCount = recentAnswers.length;
+    const autoScored = recentAnswers.filter((answer) => answer.isCorrect !== null);
+    const correctCount = autoScored.filter((answer) => answer.isCorrect).length;
+    const accuracy =
+      autoScored.length === 0 ? null : Math.round((correctCount / autoScored.length) * 100);
 
     return {
       world: {
@@ -417,7 +456,38 @@ export class WorldsService {
           : "Mulai dari materi pertama",
       message: needsRemedial
         ? "Sistem akan memberi materi singkat dan kasus baru dengan pola mirip."
-        : "Belajar materi, lihat studi kasus, lalu kerjakan tes.",
+        : targetMastery
+          ? "Rekomendasi dihitung dari mastery dan riwayat jawaban terakhir."
+          : "Mulai dari materi pertama karena data belajar di dunia ini belum cukup.",
+      recommendationBasis: {
+        strategy: "RULE_BASED_DATA_DRIVEN",
+        machineLearningRequired: false,
+        explanation:
+          "Tahap ini belum perlu machine learning. Sistem memakai aturan deterministik dari onboarding, placement, mastery, dan history jawaban. ML bisa ditambahkan nanti setelah data siswa cukup besar.",
+        signals: {
+          gradeLevel: student?.gradeLevel ?? null,
+          onboardingCompletedAt: student?.onboarding?.completedAt ?? null,
+          preferredWorld: student?.onboarding?.learningWorld ?? null,
+          placementRecommendedLevel:
+            student?.placementAttempts[0]?.analysis?.recommendedLevel ?? null,
+          placementSelectedWorld:
+            student?.placementAttempts[0]?.analysis?.selectedWorld ?? null,
+          accountLevel: student?.gameProfile?.accountLevel ?? null,
+          masteryEvidenceCount: targetMastery?.evidenceCount ?? 0,
+          targetMasteryScore: targetMastery
+            ? Number(targetMastery.masteryScore)
+            : null,
+          recentAnsweredCount: answeredCount,
+          recentAutoScoredCount: autoScored.length,
+          recentAccuracy: accuracy,
+        },
+        rule:
+          needsRemedial
+            ? "Pilih kompetensi dengan mastery < 60 atau status NEEDS_PRACTICE."
+            : targetMastery
+              ? "Lanjutkan modul berikutnya karena mastery target sudah cukup."
+              : "Mulai modul pertama karena belum ada bukti mastery.",
+      },
       targetModule,
       mastery: targetMastery
         ? {

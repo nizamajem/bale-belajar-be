@@ -3,6 +3,8 @@ import { MissionStatus } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
 
+const MIN_ACTIVE_QUEST_QUESTIONS = 10;
+
 @Injectable()
 export class StudentBaleVerseService {
   constructor(private readonly prisma: PrismaService) {}
@@ -38,8 +40,12 @@ export class StudentBaleVerseService {
         subject: { select: { name: true } },
         worldProgress: { where: { studentProfileId }, take: 1 },
         quests: {
-          where: { status: MissionStatus.ACTIVE },
+          where: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: "ACTIVE" } },
+          },
           orderBy: { code: "asc" },
+          include: { _count: { select: { questions: { where: { status: "ACTIVE" } } } } },
           take: 6,
         },
         chapters: { orderBy: { chapterNumber: "asc" }, take: 8 },
@@ -57,7 +63,10 @@ export class StudentBaleVerseService {
       worlds.find((world) => world.quests.length > 0) ??
       worlds[0];
     const activeQuest =
-      selectedWorldData.quests[0] ?? worlds.flatMap((world) => world.quests)[0];
+      selectedWorldData.quests.find((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS) ??
+      worlds.flatMap((world) => world.quests).find((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS) ??
+      selectedWorldData.quests[0] ??
+      worlds.flatMap((world) => world.quests)[0];
     const analysis = student.placementAttempts[0]?.analysis;
 
     return {
@@ -87,7 +96,10 @@ export class StudentBaleVerseService {
         name: world.name,
         subject: world.subject.name,
         description: world.themeDescription ?? world.characterClass,
-        exampleMission: world.quests[0]?.title ?? "Belum ada misi aktif",
+        exampleMission:
+          world.quests.find((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS)?.title ??
+          world.quests[0]?.title ??
+          "Belum ada misi aktif",
         mastery: world.worldProgress[0]?.worldLevel ?? 1,
         unlocked: world.quests.length > 0,
       })),
@@ -98,7 +110,10 @@ export class StudentBaleVerseService {
         description: quest.objective ?? quest.studentInstruction ?? quest.story ?? "",
         durationMinutes: quest.estimatedMinutes,
         rewardXp: quest.xpRewardFirst,
-        active: index === 0,
+        questionCount: quest._count.questions,
+        active:
+          quest.id === activeQuest?.id ||
+          (index === 0 && !selectedWorldData.quests.some((item) => item.id === activeQuest?.id)),
       })),
       learningPath: selectedWorldData.chapters.map((chapter, index) => ({
         step: chapter.chapterNumber,
@@ -160,7 +175,7 @@ export class StudentBaleVerseService {
     if (candidate) {
       const existing = await this.prisma.world.findUnique({
         where: { key: candidate },
-        select: { key: true, quests: { where: { status: MissionStatus.ACTIVE }, take: 1 } },
+      select: { key: true, quests: { where: { status: MissionStatus.ACTIVE }, take: 1 } },
       });
       if (existing?.quests.length) return existing.key;
     }

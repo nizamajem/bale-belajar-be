@@ -48,6 +48,8 @@ const assignmentInclude = {
 type AssignmentWithQuest = Prisma.QuestAssignmentGetPayload<{ include: typeof assignmentInclude }>;
 type QuestQuestionWithChildren = Prisma.QuestQuestionGetPayload<{ include: typeof questionInclude }>;
 
+const MIN_ACTIVE_QUEST_QUESTIONS = 10;
+
 @Injectable()
 export class StudentQuestsService {
   constructor(
@@ -77,6 +79,39 @@ export class StudentQuestsService {
       include: assignmentInclude,
     });
 
+    if (
+      assignment &&
+      assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS &&
+      assignment.attempt?.status !== AttemptStatus.SUBMITTED
+    ) {
+      const replacementQuest = await this.pickQuestForToday(world.id, assignment.questId);
+      if (replacementQuest.id !== assignment.questId) {
+        await this.prisma.$transaction(async (tx) => {
+          if (assignment?.attempt) {
+            await tx.questAnswer.deleteMany({ where: { questAttemptId: assignment.attempt.id } });
+            await tx.questAttempt.delete({ where: { id: assignment.attempt.id } });
+          }
+          await tx.questAssignment.update({
+            where: { id: assignment!.id },
+            data: {
+              questId: replacementQuest.id,
+              status: AssignmentStatus.ASSIGNED,
+            },
+          });
+        });
+        assignment = await this.prisma.questAssignment.findUnique({
+          where: {
+            studentProfileId_worldId_assignedDate: {
+              studentProfileId,
+              worldId: world.id,
+              assignedDate,
+            },
+          },
+          include: assignmentInclude,
+        });
+      }
+    }
+
     if (!assignment) {
       const quest = await this.pickQuestForToday(world.id);
 
@@ -93,6 +128,11 @@ export class StudentQuestsService {
 
     if (assignment.quest.questions.length === 0) {
       throw new NotFoundException("Misi ini belum punya pertanyaan aktif.");
+    }
+    if (assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS) {
+      throw new NotFoundException(
+        `Misi hari ini baru punya ${assignment.quest.questions.length} pertanyaan aktif. Minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan.`,
+      );
     }
 
     return this.serializeAssignment(assignment);
@@ -283,22 +323,31 @@ export class StudentQuestsService {
     };
   }
 
-  private async pickQuestForToday(worldId: string) {
+  private async pickQuestForToday(worldId: string, excludeQuestId?: string) {
     const activeQuests = await this.prisma.quest.findMany({
       where: {
         worldId,
         status: "ACTIVE",
+        ...(excludeQuestId ? { id: { not: excludeQuestId } } : {}),
         questions: { some: { status: "ACTIVE" } },
       },
       orderBy: { createdAt: "asc" },
+      include: {
+        _count: { select: { questions: { where: { status: "ACTIVE" } } } },
+      },
     });
 
-    if (activeQuests.length === 0) {
-      throw new NotFoundException("Belum ada quest aktif dengan pertanyaan untuk dunia ini.");
+    const readyQuests = activeQuests.filter(
+      (quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS,
+    );
+    if (readyQuests.length === 0) {
+      throw new NotFoundException(
+        `Belum ada quest aktif dengan minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan untuk dunia ini.`,
+      );
     }
 
     const dayIndex = Math.floor(Date.now() / 86_400_000);
-    return activeQuests[dayIndex % activeQuests.length];
+    return readyQuests[dayIndex % readyQuests.length];
   }
 
   private serializeAssignment(assignment: AssignmentWithQuest) {
