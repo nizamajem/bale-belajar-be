@@ -50,6 +50,23 @@ function json(row: Row, key: string): Prisma.InputJsonValue | undefined {
   }
 }
 
+function orderItemLabel(
+  questionId: string,
+  row: Row,
+  optionLabelByQuestionAndId: Map<string, string>,
+  index: number,
+) {
+  const direct = row.label ?? row.text ?? row.title ?? row.name ?? row.description;
+  if (direct?.trim()) return direct.trim();
+
+  const itemId = row.item_id ?? String(index);
+  const optionId = itemId.includes('_') ? itemId.split('_').at(-1) : itemId;
+  const optionLabel =
+    optionLabelByQuestionAndId.get(`${questionId}:${itemId}`) ??
+    (optionId ? optionLabelByQuestionAndId.get(`${questionId}:${optionId}`) : undefined);
+  return optionLabel ?? itemId;
+}
+
 // questionType di curriculum-data.json memakai camelCase ("audioChoice"),
 // enum Prisma QuestQuestionType memakai SCREAMING_SNAKE ("AUDIO_CHOICE") -
 // sama persis konvensi payload string QuestionType di Flutter, jadi cukup
@@ -409,10 +426,18 @@ async function main() {
   };
 
   const optionsByQuestion = byQuestion(optionRows as (Row & { question_id: string })[]);
+  const optionLabelByQuestionAndId = new Map<string, string>();
   let optionCount = 0;
   for (const [sourceQuestionId, rows] of optionsByQuestion) {
     const question = questionBySourceId.get(sourceQuestionId);
     if (!question) continue;
+    for (const row of rows) {
+      if (!row.option_id) continue;
+      optionLabelByQuestionAndId.set(
+        `${sourceQuestionId}:${row.option_id}`,
+        row.label ?? row.text ?? row.title ?? row.name ?? row.description ?? row.option_id,
+      );
+    }
     await prisma.questQuestionOption.deleteMany({ where: { questQuestionId: question.id } });
     await prisma.questQuestionOption.createMany({
       data: rows.map((r, i) => ({
@@ -461,7 +486,7 @@ async function main() {
         questQuestionId: question.id,
         itemKind: r.item_kind ?? 'ordering',
         itemId: r.item_id ?? String(i),
-        label: r.label ?? '',
+        label: orderItemLabel(sourceQuestionId, r, optionLabelByQuestionAndId, i),
         timeLabel: str(r, 'time_label'),
         description: str(r, 'description'),
         displayOrder: int(r, 'display_order') ?? i + 1,

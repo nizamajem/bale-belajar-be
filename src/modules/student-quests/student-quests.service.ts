@@ -36,6 +36,7 @@ const assignmentInclude = {
     include: {
       chapter: { select: { id: true, title: true, story: true } },
       questions: {
+        where: { status: "ACTIVE" as const },
         orderBy: { orderNumber: "asc" as const },
         include: questionInclude,
       },
@@ -88,6 +89,10 @@ export class StudentQuestsService {
         },
         include: assignmentInclude,
       });
+    }
+
+    if (assignment.quest.questions.length === 0) {
+      throw new NotFoundException("Misi ini belum punya pertanyaan aktif.");
     }
 
     return this.serializeAssignment(assignment);
@@ -280,12 +285,16 @@ export class StudentQuestsService {
 
   private async pickQuestForToday(worldId: string) {
     const activeQuests = await this.prisma.quest.findMany({
-      where: { worldId, status: "ACTIVE" },
+      where: {
+        worldId,
+        status: "ACTIVE",
+        questions: { some: { status: "ACTIVE" } },
+      },
       orderBy: { createdAt: "asc" },
     });
 
     if (activeQuests.length === 0) {
-      throw new NotFoundException("Belum ada quest aktif untuk dunia ini.");
+      throw new NotFoundException("Belum ada quest aktif dengan pertanyaan untuk dunia ini.");
     }
 
     const dayIndex = Math.floor(Date.now() / 86_400_000);
@@ -399,7 +408,7 @@ export class StudentQuestsService {
           ...base,
           items: question.orderItems.map((i) => ({
             id: i.itemId,
-            label: i.label,
+            label: this.orderItemLabel(i, question.options),
             timeLabel: i.timeLabel,
             description: i.description,
           })),
@@ -461,7 +470,7 @@ export class StudentQuestsService {
       })),
       correctOrder: [...question.orderItems]
         .sort((a, b) => a.correctPosition - b.correctPosition)
-        .map((i) => ({ id: i.itemId, label: i.label })),
+        .map((i) => ({ id: i.itemId, label: this.orderItemLabel(i, question.options) })),
       acceptedAnswers: question.acceptedAnswers.map((a) => a.answerText),
       hotspotAreas: question.hotspotAreas.map((h) => ({ id: h.hotspotId, label: h.label, isCorrect: h.isCorrect })),
       evidenceItems: question.evidenceItems.map((e) => ({
@@ -505,6 +514,22 @@ export class StudentQuestsService {
       throw new ForbiddenException("Akses hanya untuk siswa.");
     }
     return currentUser.studentProfileId;
+  }
+
+  private orderItemLabel(
+    item: QuestQuestionWithChildren["orderItems"][number],
+    options: QuestQuestionWithChildren["options"],
+  ) {
+    const direct = item.label?.trim() || item.description?.trim();
+    if (direct) return direct;
+
+    const optionId = item.itemId.includes("_")
+      ? item.itemId.split("_").at(-1)
+      : item.itemId;
+    const linkedOption = options.find(
+      (option) => option.optionId === optionId || option.optionId === item.itemId,
+    );
+    return linkedOption?.label?.trim() || item.itemId;
   }
 
   private async getAssignmentForStudent(currentUser: AuthenticatedUser, assignmentId: string) {
