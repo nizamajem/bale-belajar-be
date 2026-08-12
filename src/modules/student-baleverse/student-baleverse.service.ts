@@ -175,16 +175,78 @@ export class StudentBaleVerseService {
     if (candidate) {
       const existing = await this.prisma.world.findUnique({
         where: { key: candidate },
-      select: { key: true, quests: { where: { status: MissionStatus.ACTIVE }, take: 1 } },
+        select: {
+          key: true,
+          quests: {
+            where: {
+              status: MissionStatus.ACTIVE,
+              questions: { some: { status: "ACTIVE" } },
+            },
+            include: {
+              _count: { select: { questions: { where: { status: "ACTIVE" } } } },
+            },
+          },
+        },
       });
-      if (existing?.quests.length) return existing.key;
+      if (
+        existing?.quests.some(
+          (quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS,
+        )
+      ) {
+        return existing.key;
+      }
     }
     const firstWithQuest = await this.prisma.world.findFirst({
-      where: { isActive: true, quests: { some: { status: MissionStatus.ACTIVE } } },
+      where: {
+        isActive: true,
+        quests: {
+          some: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: "ACTIVE" } },
+          },
+        },
+      },
       orderBy: { orderNumber: "asc" },
-      select: { key: true },
+      select: {
+        key: true,
+        quests: {
+          where: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: "ACTIVE" } },
+          },
+          include: {
+            _count: { select: { questions: { where: { status: "ACTIVE" } } } },
+          },
+        },
+      },
     });
-    return firstWithQuest?.key ?? candidate ?? "scientia";
+    if (
+      firstWithQuest?.quests.some(
+        (quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS,
+      )
+    ) {
+      return firstWithQuest.key;
+    }
+    const allWorlds = await this.prisma.world.findMany({
+      where: { isActive: true },
+      orderBy: { orderNumber: "asc" },
+      select: {
+        key: true,
+        quests: {
+          where: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: "ACTIVE" } },
+          },
+          include: {
+            _count: { select: { questions: { where: { status: "ACTIVE" } } } },
+          },
+        },
+      },
+    });
+    const readyWorld = allWorlds.find((world) =>
+      world.quests.some((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS),
+    );
+    return readyWorld?.key ?? candidate ?? "scientia";
   }
 
   private rankForLevel(level: number) {

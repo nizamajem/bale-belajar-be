@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { AssignmentStatus, AttemptStatus, Prisma, XpReason } from "@prisma/client";
+import { AssignmentStatus, AttemptStatus, MissionStatus, Prisma, XpReason } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
 import { ExperienceLedgerService } from "../experience-ledger/experience-ledger.service";
@@ -60,10 +60,12 @@ export class StudentQuestsService {
 
   async getTodayQuest(currentUser: AuthenticatedUser, worldKey: string) {
     const studentProfileId = this.getStudentProfileId(currentUser);
-    const world = await this.prisma.world.findUnique({ where: { key: worldKey } });
+    const world = await this.resolvePlayableWorld(worldKey);
 
-    if (!world || !world.isActive) {
-      throw new NotFoundException("Dunia tidak ditemukan.");
+    if (!world) {
+      throw new NotFoundException(
+        `Belum ada world yang punya misi aktif minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan.`,
+      );
     }
 
     const assignedDate = startOfDay(new Date());
@@ -348,6 +350,68 @@ export class StudentQuestsService {
 
     const dayIndex = Math.floor(Date.now() / 86_400_000);
     return readyQuests[dayIndex % readyQuests.length];
+  }
+
+  private async resolvePlayableWorld(worldKey: string) {
+    const requestedWorld = await this.prisma.world.findFirst({
+      where: {
+        key: worldKey,
+        isActive: true,
+        quests: {
+          some: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: "ACTIVE" } },
+          },
+        },
+      },
+      select: { id: true, key: true, isActive: true },
+    });
+
+    if (requestedWorld && await this.worldHasReadyQuest(requestedWorld.id)) {
+      return requestedWorld;
+    }
+
+    return this.prisma.world.findFirst({
+      where: {
+        isActive: true,
+        quests: {
+          some: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: "ACTIVE" } },
+          },
+        },
+      },
+      orderBy: { orderNumber: "asc" },
+      select: { id: true, key: true, isActive: true },
+    }).then(async (world) => {
+      if (!world) return null;
+      if (await this.worldHasReadyQuest(world.id)) return world;
+
+      const worlds = await this.prisma.world.findMany({
+        where: { isActive: true },
+        orderBy: { orderNumber: "asc" },
+        select: { id: true, key: true, isActive: true },
+      });
+      for (const candidate of worlds) {
+        if (await this.worldHasReadyQuest(candidate.id)) return candidate;
+      }
+      return null;
+    });
+  }
+
+  private async worldHasReadyQuest(worldId: string) {
+    const quests = await this.prisma.quest.findMany({
+      where: {
+        worldId,
+        status: MissionStatus.ACTIVE,
+        questions: { some: { status: "ACTIVE" } },
+      },
+      select: {
+        id: true,
+        _count: { select: { questions: { where: { status: "ACTIVE" } } } },
+      },
+    });
+    return quests.some((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS);
   }
 
   private serializeAssignment(assignment: AssignmentWithQuest) {
