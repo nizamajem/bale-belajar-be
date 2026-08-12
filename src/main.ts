@@ -3,8 +3,9 @@ import { ConfigService } from "@nestjs/config";
 import { Reflector } from "@nestjs/core";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import { json, urlencoded } from "express";
+import { json, static as serveStatic, urlencoded } from "express";
 import helmet from "helmet";
+import { join } from "path";
 import { AppModule } from "./app.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
@@ -18,6 +19,7 @@ async function bootstrap() {
   const profileUrl = configService.get<string>("PROFILE_URL", "http://localhost:3001");
 
   app.setGlobalPrefix(apiPrefix);
+  app.use("/curriculum-assets", serveStatic(join(process.cwd(), "public", "curriculum-assets")));
   app.use(json({ limit: "25mb" }));
   app.use(urlencoded({ extended: true, limit: "25mb" }));
   app.use(helmet());

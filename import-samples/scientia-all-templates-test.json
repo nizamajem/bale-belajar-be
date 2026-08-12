@@ -1,0 +1,521 @@
+{
+  "workbook": "scientia-all-templates-test-2026-08-12.json",
+  "sourcePath": "manual-test-sample",
+  "sheets": {
+    "WORLD_MASTER": {
+      "headerRowNumber": 1,
+      "headers": ["world_id", "world_name", "subject", "description", "lore"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "world_id": "SCI_TPL",
+          "world_name": "Scientia",
+          "subject": "Sains",
+          "description": "Dunia sains untuk menguji semua template soal BaleVerse.",
+          "lore": "Laboratorium mini untuk mengecek semua tipe interaksi soal."
+        }
+      ]
+    },
+    "SUB_WORLD": {
+      "headerRowNumber": 1,
+      "headers": ["sub_world_id", "world_id", "name"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "sub_world_id": "SCI_TPL_BIO",
+          "world_id": "SCI_TPL",
+          "name": "Sains Terpadu"
+        }
+      ]
+    },
+    "CHAPTER_MASTER": {
+      "headerRowNumber": 1,
+      "headers": ["chapter_id", "sub_world_id", "chapter_number", "chapter_title", "chapter_story", "difficulty"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "chapter_id": "SCI_TPL_CH01",
+          "sub_world_id": "SCI_TPL_BIO",
+          "chapter_number": "1",
+          "chapter_title": "Uji Semua Template Sains",
+          "chapter_story": "Siswa membantu Babe mengecek seluruh bentuk soal sains.",
+          "difficulty": "Easy"
+        }
+      ]
+    },
+    "COMPETENCY_MASTER": {
+      "headerRowNumber": 1,
+      "headers": ["competency_id", "chapter_id", "competency_name", "description", "sequence_number"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "competency_id": "SCI_TPL_COMP01",
+          "chapter_id": "SCI_TPL_CH01",
+          "competency_name": "Menggunakan bukti ilmiah sederhana",
+          "description": "Siswa mengamati, memilih bukti, mengurutkan proses, dan menjelaskan alasan ilmiah sederhana.",
+          "sequence_number": "1"
+        }
+      ]
+    },
+    "SUBCOMPETENCY": {
+      "headerRowNumber": 1,
+      "headers": ["subcompetency_id", "competency_id", "name", "learning_objective", "sequence_number"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "competency_id": "SCI_TPL_COMP01",
+          "name": "Observasi dan penalaran sains",
+          "learning_objective": "Siswa dapat memilih jawaban, mencocokkan, mengurutkan, dan menjelaskan fenomena sains.",
+          "sequence_number": "1"
+        }
+      ]
+    },
+    "DAILY_MISSION_TEMPLATE": {
+      "headerRowNumber": 1,
+      "headers": ["mission_id", "chapter_id", "subcompetency_id", "mission_title", "mission_type", "mission_story", "objective", "student_instruction", "duration_minutes", "xp_reward_first"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "mission_id": "SCI_TPL_M001",
+          "chapter_id": "SCI_TPL_CH01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "mission_title": "Lab Uji Template",
+          "mission_type": "Daily",
+          "mission_story": "Babe menyiapkan satu misi berisi semua tipe soal.",
+          "objective": "Memastikan semua template soal dapat tampil dan disubmit.",
+          "student_instruction": "Kerjakan setiap soal sesuai instruksi di layar.",
+          "duration_minutes": "20",
+          "xp_reward_first": "80"
+        }
+      ]
+    },
+    "QUESTION_BANK": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "mission_id", "competency_id", "subcompetency_id", "question_type", "question_text", "instruction", "correct_answer", "scoring_rule", "difficulty", "bloom_level", "measurement_category", "skill_tags", "mastery_point", "xp_reward", "estimated_time_seconds"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "question_id": "SCI_TPL_Q001",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "singleChoice",
+          "question_text": "Benda mana yang termasuk makhluk hidup?",
+          "instruction": "Pilih satu jawaban yang paling tepat.",
+          "correct_answer": "A",
+          "scoring_rule": "Satu opsi benar.",
+          "difficulty": "Easy",
+          "bloom_level": "Remember",
+          "measurement_category": "Konsep",
+          "skill_tags": "makhluk hidup,klasifikasi",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "45"
+        },
+        {
+          "_rowNumber": 3,
+          "question_id": "SCI_TPL_Q002",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "multipleSelect",
+          "question_text": "Pilih semua ciri makhluk hidup.",
+          "instruction": "Jawaban benar bisa lebih dari satu.",
+          "correct_answer": "A;C",
+          "scoring_rule": "Semua kunci benar harus dipilih tanpa opsi salah.",
+          "difficulty": "Easy",
+          "bloom_level": "Remember",
+          "measurement_category": "Konsep",
+          "skill_tags": "ciri makhluk hidup",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "60"
+        },
+        {
+          "_rowNumber": 4,
+          "question_id": "SCI_TPL_Q003",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "binaryChoice",
+          "question_text": "Tumbuhan membutuhkan air untuk tetap hidup.",
+          "instruction": "Pilih benar atau salah.",
+          "correct_answer": "A",
+          "scoring_rule": "A=Benar, B=Salah.",
+          "difficulty": "Easy",
+          "bloom_level": "Understand",
+          "measurement_category": "Konsep",
+          "skill_tags": "tumbuhan",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "30"
+        },
+        {
+          "_rowNumber": 5,
+          "question_id": "SCI_TPL_Q004",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "shortText",
+          "question_text": "Apa gas yang banyak dibutuhkan manusia untuk bernapas?",
+          "instruction": "Jawab dengan satu kata.",
+          "correct_answer": "oksigen",
+          "scoring_rule": "Jawaban diterima ada di ACCEPTED_ANSWERS.",
+          "difficulty": "Easy",
+          "bloom_level": "Remember",
+          "measurement_category": "Konsep",
+          "skill_tags": "pernapasan",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "45"
+        },
+        {
+          "_rowNumber": 6,
+          "question_id": "SCI_TPL_Q005",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "matching",
+          "question_text": "Jodohkan bagian tumbuhan dengan fungsinya.",
+          "instruction": "Pasangkan bagian di kiri dengan fungsi di kanan.",
+          "correct_answer": "Lihat MATCHING_PAIRS",
+          "scoring_rule": "Setiap pasangan benar mendapat skor.",
+          "difficulty": "Medium",
+          "bloom_level": "Apply",
+          "measurement_category": "Relasi",
+          "skill_tags": "tumbuhan,fungsi",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "75"
+        },
+        {
+          "_rowNumber": 7,
+          "question_id": "SCI_TPL_Q006",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "ordering",
+          "question_text": "Urutkan aliran energi pada ekosistem sawah.",
+          "instruction": "Susun dari sumber energi sampai konsumen puncak.",
+          "correct_answer": "Lihat ORDER_TIMELINE_ITEMS",
+          "scoring_rule": "correct_position menentukan urutan benar.",
+          "difficulty": "Medium",
+          "bloom_level": "Apply",
+          "measurement_category": "Proses",
+          "skill_tags": "rantai makanan,energi",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "90"
+        },
+        {
+          "_rowNumber": 8,
+          "question_id": "SCI_TPL_Q007",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "imageChoice",
+          "question_text": "Gambar mana yang menunjukkan akar tumbuhan?",
+          "instruction": "Pilih gambar yang sesuai.",
+          "correct_answer": "A",
+          "scoring_rule": "Satu opsi gambar benar.",
+          "difficulty": "Easy",
+          "bloom_level": "Understand",
+          "measurement_category": "Visual",
+          "skill_tags": "tumbuhan,gambar",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "45"
+        },
+        {
+          "_rowNumber": 9,
+          "question_id": "SCI_TPL_Q008",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "audioChoice",
+          "question_text": "Dengarkan audio. Suara mana yang berasal dari makhluk hidup?",
+          "instruction": "Pilih sumber suara yang benar.",
+          "correct_answer": "B",
+          "scoring_rule": "Satu opsi benar setelah media audio.",
+          "difficulty": "Easy",
+          "bloom_level": "Understand",
+          "measurement_category": "Audio",
+          "skill_tags": "audio,observasi",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "60"
+        },
+        {
+          "_rowNumber": 10,
+          "question_id": "SCI_TPL_Q009",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "longText",
+          "question_text": "Jelaskan mengapa tanaman termasuk makhluk hidup.",
+          "instruction": "Tulis 3 sampai 5 kalimat.",
+          "correct_answer": "Dinilai dengan rubrik.",
+          "scoring_rule": "Guru/mentor menilai memakai RUBRIC_CRITERIA.",
+          "difficulty": "Medium",
+          "bloom_level": "Analyze",
+          "measurement_category": "Argumentasi",
+          "skill_tags": "penjelasan,bukti",
+          "mastery_point": "20",
+          "xp_reward": "10",
+          "estimated_time_seconds": "180"
+        },
+        {
+          "_rowNumber": 11,
+          "question_id": "SCI_TPL_Q010",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "codeInput",
+          "question_text": "Lengkapi fungsi agar mengembalikan teks 'sains'.",
+          "instruction": "Tulis kode sederhana sesuai bahasa yang tersedia.",
+          "correct_answer": "Output: sains",
+          "scoring_rule": "Dinilai review mentor, expected_output ada di CODE_CONFIG.",
+          "difficulty": "Medium",
+          "bloom_level": "Apply",
+          "measurement_category": "Komputasi",
+          "skill_tags": "kode,logika",
+          "mastery_point": "20",
+          "xp_reward": "10",
+          "estimated_time_seconds": "180"
+        },
+        {
+          "_rowNumber": 12,
+          "question_id": "SCI_TPL_Q011",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "imageHotspot",
+          "question_text": "Ketuk bagian tumbuhan yang menyerap air.",
+          "instruction": "Pilih titik pada gambar.",
+          "correct_answer": "Akar",
+          "scoring_rule": "Hotspot benar ditandai is_correct=Yes.",
+          "difficulty": "Medium",
+          "bloom_level": "Apply",
+          "measurement_category": "Visual",
+          "skill_tags": "tumbuhan,hotspot",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "90"
+        },
+        {
+          "_rowNumber": 13,
+          "question_id": "SCI_TPL_Q012",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "voiceResponse",
+          "question_text": "Jelaskan dengan suara satu bukti bahwa tumbuhan hidup.",
+          "instruction": "Rekam jawaban singkat.",
+          "correct_answer": "Dinilai dengan rubrik.",
+          "scoring_rule": "Guru/mentor menilai memakai RUBRIC_CRITERIA.",
+          "difficulty": "Medium",
+          "bloom_level": "Analyze",
+          "measurement_category": "Komunikasi",
+          "skill_tags": "lisan,bukti",
+          "mastery_point": "20",
+          "xp_reward": "10",
+          "estimated_time_seconds": "120"
+        },
+        {
+          "_rowNumber": 14,
+          "question_id": "SCI_TPL_Q013",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "timelineBuilder",
+          "question_text": "Susun timeline pertumbuhan kacang hijau.",
+          "instruction": "Urutkan peristiwa dari awal sampai akhir.",
+          "correct_answer": "Lihat ORDER_TIMELINE_ITEMS",
+          "scoring_rule": "Gunakan item_kind=timeline dan correct_position.",
+          "difficulty": "Medium",
+          "bloom_level": "Apply",
+          "measurement_category": "Proses",
+          "skill_tags": "timeline,pertumbuhan",
+          "mastery_point": "10",
+          "xp_reward": "5",
+          "estimated_time_seconds": "90"
+        },
+        {
+          "_rowNumber": 15,
+          "question_id": "SCI_TPL_Q014",
+          "mission_id": "SCI_TPL_M001",
+          "competency_id": "SCI_TPL_COMP01",
+          "subcompetency_id": "SCI_TPL_SUB01",
+          "question_type": "evidenceBoard",
+          "question_text": "Pilih bukti yang mendukung bahwa tumbuhan sedang tumbuh.",
+          "instruction": "Pilih semua kartu bukti yang relevan.",
+          "correct_answer": "Lihat EVIDENCE_ITEMS",
+          "scoring_rule": "Evidence benar ditandai is_correct_evidence=Yes.",
+          "difficulty": "Medium",
+          "bloom_level": "Analyze",
+          "measurement_category": "Bukti",
+          "skill_tags": "bukti,observasi",
+          "mastery_point": "20",
+          "xp_reward": "10",
+          "estimated_time_seconds": "120"
+        }
+      ]
+    },
+    "QUESTION_TYPE_CONFIG": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "input_mode", "max_length", "case_sensitive", "allow_empty", "allow_unit", "scoring_config", "sample_answer"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "question_id": "SCI_TPL_Q002",
+          "input_mode": "multi",
+          "max_length": "",
+          "case_sensitive": "No",
+          "allow_empty": "No",
+          "allow_unit": "No",
+          "scoring_config": "allCorrect",
+          "sample_answer": "A;C"
+        },
+        {
+          "_rowNumber": 3,
+          "question_id": "SCI_TPL_Q004",
+          "input_mode": "text",
+          "max_length": "80",
+          "case_sensitive": "No",
+          "allow_empty": "No",
+          "allow_unit": "No",
+          "scoring_config": "accepted_answers",
+          "sample_answer": "oksigen"
+        },
+        {
+          "_rowNumber": 4,
+          "question_id": "SCI_TPL_Q009",
+          "input_mode": "textarea",
+          "max_length": "600",
+          "case_sensitive": "No",
+          "allow_empty": "No",
+          "allow_unit": "No",
+          "scoring_config": "rubric_review",
+          "sample_answer": "Tanaman tumbuh, membutuhkan air, dan berkembang."
+        },
+        {
+          "_rowNumber": 5,
+          "question_id": "SCI_TPL_Q012",
+          "input_mode": "voice",
+          "max_length": "120",
+          "case_sensitive": "No",
+          "allow_empty": "No",
+          "allow_unit": "No",
+          "scoring_config": "rubric_review",
+          "sample_answer": "Tumbuhan bertambah tinggi sehingga menunjukkan ciri tumbuh."
+        }
+      ]
+    },
+    "QUESTION_OPTIONS": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "option_id", "label", "description", "image_url", "is_correct", "misconception", "display_order"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q001", "option_id": "A", "label": "Tanaman padi", "description": "Tumbuhan adalah makhluk hidup.", "image_url": "", "is_correct": "Yes", "misconception": "", "display_order": "1"},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q001", "option_id": "B", "label": "Batu kali", "description": "Benda tak hidup.", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "2"},
+        {"_rowNumber": 4, "question_id": "SCI_TPL_Q001", "option_id": "C", "label": "Meja kayu", "description": "Benda tak hidup.", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "3"},
+        {"_rowNumber": 5, "question_id": "SCI_TPL_Q001", "option_id": "D", "label": "Air hujan", "description": "Benda tak hidup.", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "4"},
+        {"_rowNumber": 6, "question_id": "SCI_TPL_Q002", "option_id": "A", "label": "Bernapas", "description": "", "image_url": "", "is_correct": "Yes", "misconception": "", "display_order": "1"},
+        {"_rowNumber": 7, "question_id": "SCI_TPL_Q002", "option_id": "B", "label": "Berwarna merah", "description": "", "image_url": "", "is_correct": "No", "misconception": "Warna bukan ciri hidup.", "display_order": "2"},
+        {"_rowNumber": 8, "question_id": "SCI_TPL_Q002", "option_id": "C", "label": "Berkembang biak", "description": "", "image_url": "", "is_correct": "Yes", "misconception": "", "display_order": "3"},
+        {"_rowNumber": 9, "question_id": "SCI_TPL_Q002", "option_id": "D", "label": "Terbuat dari plastik", "description": "", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "4"},
+        {"_rowNumber": 10, "question_id": "SCI_TPL_Q003", "option_id": "A", "label": "Benar", "description": "", "image_url": "", "is_correct": "Yes", "misconception": "", "display_order": "1"},
+        {"_rowNumber": 11, "question_id": "SCI_TPL_Q003", "option_id": "B", "label": "Salah", "description": "", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "2"},
+        {"_rowNumber": 12, "question_id": "SCI_TPL_Q007", "option_id": "A", "label": "Akar tumbuhan", "description": "Bagian bawah tumbuhan.", "image_url": "https://api.balebelajar.com/curriculum-assets/scientia/root-option.png", "is_correct": "Yes", "misconception": "", "display_order": "1"},
+        {"_rowNumber": 13, "question_id": "SCI_TPL_Q007", "option_id": "B", "label": "Daun", "description": "Bagian hijau untuk fotosintesis.", "image_url": "https://api.balebelajar.com/curriculum-assets/scientia/leaf-option.png", "is_correct": "No", "misconception": "", "display_order": "2"},
+        {"_rowNumber": 14, "question_id": "SCI_TPL_Q007", "option_id": "C", "label": "Bunga", "description": "Bagian reproduksi tumbuhan.", "image_url": "https://api.balebelajar.com/curriculum-assets/scientia/flower-option.png", "is_correct": "No", "misconception": "", "display_order": "3"},
+        {"_rowNumber": 15, "question_id": "SCI_TPL_Q007", "option_id": "D", "label": "Buah", "description": "Bagian yang melindungi biji.", "image_url": "https://api.balebelajar.com/curriculum-assets/scientia/fruit-option.png", "is_correct": "No", "misconception": "", "display_order": "4"},
+        {"_rowNumber": 16, "question_id": "SCI_TPL_Q008", "option_id": "A", "label": "Suara bel listrik", "description": "", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "1"},
+        {"_rowNumber": 17, "question_id": "SCI_TPL_Q008", "option_id": "B", "label": "Suara burung berkicau", "description": "", "image_url": "", "is_correct": "Yes", "misconception": "", "display_order": "2"},
+        {"_rowNumber": 18, "question_id": "SCI_TPL_Q008", "option_id": "C", "label": "Suara pintu tertutup", "description": "", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "3"},
+        {"_rowNumber": 19, "question_id": "SCI_TPL_Q008", "option_id": "D", "label": "Suara air keran", "description": "", "image_url": "", "is_correct": "No", "misconception": "", "display_order": "4"}
+      ]
+    },
+    "MATCHING_PAIRS": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "left_id", "left_label", "right_id", "right_label", "pair_order"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q005", "left_id": "L1", "left_label": "Akar", "right_id": "R1", "right_label": "Menyerap air dan mineral", "pair_order": "1"},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q005", "left_id": "L2", "left_label": "Daun", "right_id": "R2", "right_label": "Tempat fotosintesis", "pair_order": "2"},
+        {"_rowNumber": 4, "question_id": "SCI_TPL_Q005", "left_id": "L3", "left_label": "Batang", "right_id": "R3", "right_label": "Menopang dan mengangkut air", "pair_order": "3"}
+      ]
+    },
+    "ORDER_TIMELINE_ITEMS": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "item_kind", "item_id", "label", "time_label", "description", "display_order", "correct_position"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q006", "item_kind": "ordering", "item_id": "SUN", "label": "Matahari", "time_label": "", "description": "Sumber energi utama.", "display_order": "1", "correct_position": "1"},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q006", "item_kind": "ordering", "item_id": "RICE", "label": "Padi", "time_label": "", "description": "Produsen yang menangkap energi matahari.", "display_order": "2", "correct_position": "2"},
+        {"_rowNumber": 4, "question_id": "SCI_TPL_Q006", "item_kind": "ordering", "item_id": "MOUSE", "label": "Tikus", "time_label": "", "description": "Konsumen pertama.", "display_order": "3", "correct_position": "3"},
+        {"_rowNumber": 5, "question_id": "SCI_TPL_Q006", "item_kind": "ordering", "item_id": "EAGLE", "label": "Elang", "time_label": "", "description": "Konsumen puncak.", "display_order": "4", "correct_position": "4"},
+        {"_rowNumber": 6, "question_id": "SCI_TPL_Q013", "item_kind": "timeline", "item_id": "DAY1", "label": "Biji menyerap air", "time_label": "Hari 1", "description": "Biji mulai membesar.", "display_order": "1", "correct_position": "1"},
+        {"_rowNumber": 7, "question_id": "SCI_TPL_Q013", "item_kind": "timeline", "item_id": "DAY2", "label": "Akar kecil muncul", "time_label": "Hari 2", "description": "Akar pertama terlihat.", "display_order": "2", "correct_position": "2"},
+        {"_rowNumber": 8, "question_id": "SCI_TPL_Q013", "item_kind": "timeline", "item_id": "DAY4", "label": "Batang tumbuh ke atas", "time_label": "Hari 4", "description": "Tunas mulai terlihat.", "display_order": "3", "correct_position": "3"},
+        {"_rowNumber": 9, "question_id": "SCI_TPL_Q013", "item_kind": "timeline", "item_id": "DAY7", "label": "Daun pertama terbuka", "time_label": "Hari 7", "description": "Daun kecil membuka.", "display_order": "4", "correct_position": "4"}
+      ]
+    },
+    "ACCEPTED_ANSWERS": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "accepted_answer", "normalized_answer", "tolerance_numeric", "unit", "is_primary"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q004", "accepted_answer": "oksigen", "normalized_answer": "oksigen", "tolerance_numeric": "", "unit": "", "is_primary": "Yes"},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q004", "accepted_answer": "oxygen", "normalized_answer": "oxygen", "tolerance_numeric": "", "unit": "", "is_primary": "No"}
+      ]
+    },
+    "RUBRIC_CRITERIA": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "criterion_id", "criterion", "criterion_description", "weight_pct", "score_1_description", "score_2_description", "score_3_description", "score_4_description"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q009", "criterion_id": "C1", "criterion": "Bukti ciri hidup", "criterion_description": "Menyebut tumbuh, butuh air, bernapas, atau berkembang biak.", "weight_pct": "60", "score_1_description": "Tidak ada bukti.", "score_2_description": "Bukti kurang tepat.", "score_3_description": "Satu bukti tepat.", "score_4_description": "Beberapa bukti tepat dan jelas."},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q009", "criterion_id": "C2", "criterion": "Kejelasan alasan", "criterion_description": "Alasan mudah dipahami dan terhubung dengan bukti.", "weight_pct": "40", "score_1_description": "Tidak jelas.", "score_2_description": "Sebagian jelas.", "score_3_description": "Jelas.", "score_4_description": "Sangat jelas dan runtut."},
+        {"_rowNumber": 4, "question_id": "SCI_TPL_Q012", "criterion_id": "C1", "criterion": "Jawaban lisan berbasis bukti", "criterion_description": "Jawaban suara menyebut bukti bahwa tumbuhan hidup.", "weight_pct": "100", "score_1_description": "Tidak menyebut bukti.", "score_2_description": "Bukti kurang tepat.", "score_3_description": "Bukti tepat.", "score_4_description": "Bukti tepat dan dijelaskan singkat."}
+      ]
+    },
+    "QUESTION_MEDIA": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "media_type", "url", "duration_seconds", "max_replay", "transcript_available", "transcript", "alt_text"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q008", "media_type": "audio", "url": "https://cdn.baleverse.example/assets/test/audio-burung.mp3", "duration_seconds": "12", "max_replay": "2", "transcript_available": "Yes", "transcript": "Terdengar bel listrik lalu burung berkicau.", "alt_text": ""},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q011", "media_type": "image", "url": "https://api.balebelajar.com/curriculum-assets/scientia/plant-hotspot.png", "duration_seconds": "", "max_replay": "", "transcript_available": "No", "transcript": "", "alt_text": "Diagram bagian tumbuhan."}
+      ]
+    },
+    "HOTSPOT_AREAS": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "hotspot_id", "label", "x_relative", "y_relative", "radius_relative", "is_correct", "misconception"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q011", "hotspot_id": "ROOT", "label": "Akar", "x_relative": "0.50", "y_relative": "0.82", "radius_relative": "0.08", "is_correct": "Yes", "misconception": ""},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q011", "hotspot_id": "LEAF", "label": "Daun", "x_relative": "0.42", "y_relative": "0.30", "radius_relative": "0.08", "is_correct": "No", "misconception": "Daun bukan bagian utama penyerap air."}
+      ]
+    },
+    "EVIDENCE_ITEMS": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "evidence_id", "label", "description", "category", "is_correct_evidence", "misconception", "display_order"],
+      "rows": [
+        {"_rowNumber": 2, "question_id": "SCI_TPL_Q014", "evidence_id": "E1", "label": "Tinggi tanaman bertambah dari 4 cm menjadi 8 cm", "description": "Data pengukuran menunjukkan pertumbuhan.", "category": "Data", "is_correct_evidence": "Yes", "misconception": "", "display_order": "1"},
+        {"_rowNumber": 3, "question_id": "SCI_TPL_Q014", "evidence_id": "E2", "label": "Muncul daun baru pada hari ketujuh", "description": "Daun baru menunjukkan perubahan pertumbuhan.", "category": "Observasi", "is_correct_evidence": "Yes", "misconception": "", "display_order": "2"},
+        {"_rowNumber": 4, "question_id": "SCI_TPL_Q014", "evidence_id": "E3", "label": "Pot tanaman berwarna biru", "description": "Warna pot tidak membuktikan tanaman tumbuh.", "category": "Distraktor", "is_correct_evidence": "No", "misconception": "Mengambil bukti yang tidak relevan.", "display_order": "3"}
+      ]
+    },
+    "CODE_CONFIG": {
+      "headerRowNumber": 1,
+      "headers": ["question_id", "language", "initial_code", "read_only_prefix", "expected_output", "backend_execution_enabled", "test_cases_json"],
+      "rows": [
+        {
+          "_rowNumber": 2,
+          "question_id": "SCI_TPL_Q010",
+          "language": "javascript",
+          "initial_code": "function jawab() {\n  return \"\";\n}",
+          "read_only_prefix": "",
+          "expected_output": "sains",
+          "backend_execution_enabled": "No",
+          "test_cases_json": "[{\"input\":null,\"expected\":\"sains\"}]"
+        }
+      ]
+    }
+  }
+}
