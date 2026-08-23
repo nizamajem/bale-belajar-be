@@ -17,6 +17,8 @@ COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/tools ./tools
+COPY --from=build /app/public ./public
 
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && if [ \"${PREPARE_CURRICULUM_ON_START:-true}\" = \"true\" ]; then npm run prepare:curriculum; fi && node dist/main.js"]
