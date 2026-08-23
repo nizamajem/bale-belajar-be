@@ -4,7 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { CurriculumLessonType, MissionStatus, QuestionStatus, QuestQuestionType } from "@prisma/client";
+import {
+  CurriculumLessonType,
+  MissionStatus,
+  QuestionStatus,
+  QuestQuestionType,
+} from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
 
@@ -82,6 +87,7 @@ type QuestInput = {
 
 const MIN_ACTIVE_QUESTS_PER_WORLD = 5;
 const MIN_ACTIVE_QUESTIONS = 20;
+const MIN_ACTIVE_QUEST_QUESTIONS = 10;
 const REQUIRED_PLACEMENT_TYPES = [
   "SINGLE_CHOICE",
   "MULTIPLE_SELECT",
@@ -259,20 +265,47 @@ export class WorldsService {
           where: { studentProfileId },
           select: { worldLevel: true, worldXp: true },
         },
+        quests: {
+          where: {
+            status: MissionStatus.ACTIVE,
+            questions: { some: { status: QuestionStatus.ACTIVE } },
+          },
+          orderBy: { code: "asc" },
+          take: 8,
+          include: {
+            _count: {
+              select: {
+                questions: { where: { status: QuestionStatus.ACTIVE } },
+              },
+            },
+          },
+        },
       },
       orderBy: { orderNumber: "asc" },
     });
 
-    return worlds.map((world) => ({
-      id: world.id,
-      key: world.key,
-      name: world.name,
-      characterClass: world.characterClass,
-      themeDescription: world.themeDescription,
-      subject: world.subject,
-      worldLevel: world.worldProgress[0]?.worldLevel ?? 1,
-      worldXp: world.worldProgress[0]?.worldXp ?? 0,
-    }));
+    return worlds
+      .map((world) => {
+        const readyQuest =
+          world.quests.find(
+            (quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS,
+          ) ?? world.quests[0];
+        return {
+          id: world.id,
+          key: world.key,
+          name: world.name,
+          characterClass: world.characterClass,
+          themeDescription: world.themeDescription,
+          subject: world.subject,
+          worldLevel: world.worldProgress[0]?.worldLevel ?? 1,
+          worldXp: world.worldProgress[0]?.worldXp ?? 0,
+          exampleMission: readyQuest?.title ?? null,
+          activeQuestionCount: readyQuest?._count.questions ?? 0,
+        };
+      })
+      .filter(
+        (world) => world.activeQuestionCount >= MIN_ACTIVE_QUEST_QUESTIONS,
+      );
   }
 
   async findByKeyOrThrow(worldKey: string) {
@@ -295,7 +328,10 @@ export class WorldsService {
     return this.findCurriculumByWorldKeyInternal(worldKey, true);
   }
 
-  private async findCurriculumByWorldKeyInternal(worldKey: string, includeDraft: boolean) {
+  private async findCurriculumByWorldKeyInternal(
+    worldKey: string,
+    includeDraft: boolean,
+  ) {
     const world = await this.prisma.world.findUnique({
       where: { key: worldKey },
       include: {
@@ -433,10 +469,14 @@ export class WorldsService {
       },
     });
     const answeredCount = recentAnswers.length;
-    const autoScored = recentAnswers.filter((answer) => answer.isCorrect !== null);
+    const autoScored = recentAnswers.filter(
+      (answer) => answer.isCorrect !== null,
+    );
     const correctCount = autoScored.filter((answer) => answer.isCorrect).length;
     const accuracy =
-      autoScored.length === 0 ? null : Math.round((correctCount / autoScored.length) * 100);
+      autoScored.length === 0
+        ? null
+        : Math.round((correctCount / autoScored.length) * 100);
 
     return {
       world: {
@@ -481,12 +521,11 @@ export class WorldsService {
           recentAutoScoredCount: autoScored.length,
           recentAccuracy: accuracy,
         },
-        rule:
-          needsRemedial
-            ? "Pilih kompetensi dengan mastery < 60 atau status NEEDS_PRACTICE."
-            : targetMastery
-              ? "Lanjutkan modul berikutnya karena mastery target sudah cukup."
-              : "Mulai modul pertama karena belum ada bukti mastery.",
+        rule: needsRemedial
+          ? "Pilih kompetensi dengan mastery < 60 atau status NEEDS_PRACTICE."
+          : targetMastery
+            ? "Lanjutkan modul berikutnya karena mastery target sudah cukup."
+            : "Mulai modul pertama karena belum ada bukti mastery.",
       },
       targetModule,
       mastery: targetMastery
@@ -768,7 +807,9 @@ export class WorldsService {
       throw new NotFoundException("Dunia tidak ditemukan.");
     }
 
-    const competencies = world.chapters.flatMap((chapter) => chapter.competencies);
+    const competencies = world.chapters.flatMap(
+      (chapter) => chapter.competencies,
+    );
 
     return {
       world: { id: world.id, key: world.key, name: world.name },
@@ -781,7 +822,9 @@ export class WorldsService {
       competencies,
       questions: world.quests.flatMap((quest) =>
         quest.questions.map((question) => {
-          const correctOptions = question.options.filter((option) => option.isCorrect);
+          const correctOptions = question.options.filter(
+            (option) => option.isCorrect,
+          );
           return {
             ...question,
             quest: { id: quest.id, code: quest.code, title: quest.title },
@@ -794,8 +837,12 @@ export class WorldsService {
               correctOrder: question.orderItems,
               acceptedAnswers: question.acceptedAnswers,
               rubricCriteria: question.rubricCriteria,
-              correctHotspots: question.hotspotAreas.filter((area) => area.isCorrect),
-              correctEvidence: question.evidenceItems.filter((item) => item.isCorrectEvidence),
+              correctHotspots: question.hotspotAreas.filter(
+                (area) => area.isCorrect,
+              ),
+              correctEvidence: question.evidenceItems.filter(
+                (item) => item.isCorrectEvidence,
+              ),
               codeConfig: question.codeConfig,
             },
           };
@@ -821,41 +868,59 @@ export class WorldsService {
       case QuestQuestionType.BINARY_CHOICE:
       case QuestQuestionType.IMAGE_CHOICE:
       case QuestQuestionType.AUDIO_CHOICE:
-        return question.options
-          .filter((option) => option.isCorrect)
-          .map((option) => `${option.optionId}. ${option.label}`)
-          .join("; ") || "Kunci opsi belum diisi";
+        return (
+          question.options
+            .filter((option) => option.isCorrect)
+            .map((option) => `${option.optionId}. ${option.label}`)
+            .join("; ") || "Kunci opsi belum diisi"
+        );
       case QuestQuestionType.MATCHING:
-        return question.matchingPairs
-          .map((pair) => `${pair.leftLabel} -> ${pair.rightLabel}`)
-          .join("; ") || "Pasangan belum diisi";
+        return (
+          question.matchingPairs
+            .map((pair) => `${pair.leftLabel} -> ${pair.rightLabel}`)
+            .join("; ") || "Pasangan belum diisi"
+        );
       case QuestQuestionType.ORDERING:
       case QuestQuestionType.TIMELINE_BUILDER:
-        return question.orderItems
-          .sort((a, b) => a.correctPosition - b.correctPosition)
-          .map((item) => `${item.correctPosition}. ${item.label}`)
-          .join("; ") || "Urutan belum diisi";
+        return (
+          question.orderItems
+            .sort((a, b) => a.correctPosition - b.correctPosition)
+            .map((item) => `${item.correctPosition}. ${item.label}`)
+            .join("; ") || "Urutan belum diisi"
+        );
       case QuestQuestionType.SHORT_TEXT:
-        return question.acceptedAnswers
-          .map((answer) => answer.answerText)
-          .join("; ") || "Accepted answer belum diisi";
+        return (
+          question.acceptedAnswers
+            .map((answer) => answer.answerText)
+            .join("; ") || "Accepted answer belum diisi"
+        );
       case QuestQuestionType.IMAGE_HOTSPOT:
-        return question.hotspotAreas
-          .filter((area) => area.isCorrect)
-          .map((area) => area.label)
-          .join("; ") || "Hotspot benar belum diisi";
+        return (
+          question.hotspotAreas
+            .filter((area) => area.isCorrect)
+            .map((area) => area.label)
+            .join("; ") || "Hotspot benar belum diisi"
+        );
       case QuestQuestionType.EVIDENCE_BOARD:
-        return question.evidenceItems
-          .filter((item) => item.isCorrectEvidence)
-          .map((item) => item.label)
-          .join("; ") || "Evidence benar belum diisi";
+        return (
+          question.evidenceItems
+            .filter((item) => item.isCorrectEvidence)
+            .map((item) => item.label)
+            .join("; ") || "Evidence benar belum diisi"
+        );
       case QuestQuestionType.CODE_INPUT:
-        return question.codeConfig?.expectedOutput ?? "Expected output belum diisi";
+        return (
+          question.codeConfig?.expectedOutput ?? "Expected output belum diisi"
+        );
       case QuestQuestionType.LONG_TEXT:
       case QuestQuestionType.VOICE_RESPONSE:
-        return question.rubricCriteria
-          .map((rubric) => `${rubric.criterion} (${String(rubric.weightPct)}%)`)
-          .join("; ") || "Rubrik review belum diisi";
+        return (
+          question.rubricCriteria
+            .map(
+              (rubric) => `${rubric.criterion} (${String(rubric.weightPct)}%)`,
+            )
+            .join("; ") || "Rubrik review belum diisi"
+        );
       default:
         return "Kunci jawaban belum diisi";
     }
@@ -910,12 +975,16 @@ export class WorldsService {
   }
 
   async createChapter(worldKey: string, input: ChapterInput) {
-    const world = await this.prisma.world.findUnique({ where: { key: worldKey } });
+    const world = await this.prisma.world.findUnique({
+      where: { key: worldKey },
+    });
     if (!world) throw new NotFoundException("Dunia tidak ditemukan.");
     const chapterNumber =
       input.chapterNumber ??
       (await this.prisma.chapter.count({ where: { worldId: world.id } })) + 1;
-    const code = input.chapterCode?.trim() || `${world.key.toUpperCase()}_CH${String(chapterNumber).padStart(2, "0")}`;
+    const code =
+      input.chapterCode?.trim() ||
+      `${world.key.toUpperCase()}_CH${String(chapterNumber).padStart(2, "0")}`;
     return this.prisma.chapter.create({
       data: {
         worldId: world.id,
@@ -944,7 +1013,9 @@ export class WorldsService {
         estimatedDurationDays: input.estimatedDurationDays,
         goal: input.goal,
         recommendedSessions: input.recommendedSessions,
-        status: input.status ? this.parseMissionStatus(input.status) : undefined,
+        status: input.status
+          ? this.parseMissionStatus(input.status)
+          : undefined,
         story: input.story,
         subWorldKey: input.subWorldKey,
         subWorldName: input.subWorldName,
@@ -969,7 +1040,9 @@ export class WorldsService {
    * sebelum data hilang tanpa bisa dikembalikan.
    */
   async permanentlyDeleteChapter(chapterId: string, force = false) {
-    const chapter = await this.prisma.chapter.findUnique({ where: { id: chapterId } });
+    const chapter = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+    });
     if (!chapter) throw new NotFoundException("Kurikulum tidak ditemukan.");
 
     const quests = await this.prisma.quest.findMany({
@@ -993,17 +1066,27 @@ export class WorldsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.competency.updateMany({ where: { chapterId }, data: { chapterId: null } });
-      await tx.chapter.updateMany({ where: { prerequisiteChapterId: chapterId }, data: { prerequisiteChapterId: null } });
+      await tx.competency.updateMany({
+        where: { chapterId },
+        data: { chapterId: null },
+      });
+      await tx.chapter.updateMany({
+        where: { prerequisiteChapterId: chapterId },
+        data: { prerequisiteChapterId: null },
+      });
       await tx.chapter.delete({ where: { id: chapterId } });
     });
   }
 
   async createQuest(chapterId: string, input: QuestInput) {
-    const chapter = await this.prisma.chapter.findUnique({ where: { id: chapterId } });
+    const chapter = await this.prisma.chapter.findUnique({
+      where: { id: chapterId },
+    });
     if (!chapter) throw new NotFoundException("Kurikulum tidak ditemukan.");
     const count = await this.prisma.quest.count({ where: { chapterId } });
-    const code = input.code?.trim() || `${chapter.chapterCode}_M${String(count + 1).padStart(3, "0")}`;
+    const code =
+      input.code?.trim() ||
+      `${chapter.chapterCode}_M${String(count + 1).padStart(3, "0")}`;
     return this.prisma.quest.create({
       data: {
         chapterId,
@@ -1030,7 +1113,9 @@ export class WorldsService {
         estimatedMinutes: input.estimatedMinutes,
         missionType: input.missionType,
         objective: input.objective,
-        status: input.status ? this.parseMissionStatus(input.status) : undefined,
+        status: input.status
+          ? this.parseMissionStatus(input.status)
+          : undefined,
         story: input.story,
         studentInstruction: input.studentInstruction,
         title: input.title,
@@ -1054,11 +1139,15 @@ export class WorldsService {
    * permanentlyDeleteChapter() - guard yang sama berlaku di sini.
    */
   async permanentlyDeleteQuest(questId: string, force = false) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) throw new NotFoundException("Misi tidak ditemukan.");
 
     if (!force) {
-      const assignmentCount = await this.prisma.questAssignment.count({ where: { questId } });
+      const assignmentCount = await this.prisma.questAssignment.count({
+        where: { questId },
+      });
       if (assignmentCount > 0) {
         throw new BadRequestException(
           `Misi ini sudah dikerjakan ${assignmentCount} kali oleh siswa. Progres itu akan hilang permanen. Konfirmasi ulang (force) untuk tetap menghapus.`,
@@ -1074,17 +1163,39 @@ export class WorldsService {
 
     await this.prisma.$transaction(async (tx) => {
       if (questionIds.length > 0) {
-        await tx.questAnswer.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questQuestionOption.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questMatchingPair.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questOrderItem.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questAcceptedAnswer.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questRubricCriterion.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questMedia.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questHotspotArea.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questEvidenceItem.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questCodeConfig.deleteMany({ where: { questQuestionId: { in: questionIds } } });
-        await tx.questQuestion.deleteMany({ where: { id: { in: questionIds } } });
+        await tx.questAnswer.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questQuestionOption.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questMatchingPair.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questOrderItem.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questAcceptedAnswer.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questRubricCriterion.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questMedia.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questHotspotArea.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questEvidenceItem.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questCodeConfig.deleteMany({
+          where: { questQuestionId: { in: questionIds } },
+        });
+        await tx.questQuestion.deleteMany({
+          where: { id: { in: questionIds } },
+        });
       }
 
       await tx.questAttempt.deleteMany({ where: { assignment: { questId } } });
@@ -1094,7 +1205,9 @@ export class WorldsService {
   }
 
   async createQuestQuestion(questId: string, input: QuestQuestionInput) {
-    const quest = await this.prisma.quest.findUnique({ where: { id: questId } });
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
     if (!quest) {
       throw new NotFoundException("Quest tidak ditemukan.");
     }
@@ -1105,7 +1218,9 @@ export class WorldsService {
     const orderNumber =
       input.orderNumber ??
       (await this.prisma.questQuestion.count({ where: { questId } })) + 1;
-    const code = input.code?.trim() || `${quest.code}-Q${String(orderNumber).padStart(3, "0")}`;
+    const code =
+      input.code?.trim() ||
+      `${quest.code}-Q${String(orderNumber).padStart(3, "0")}`;
 
     return this.prisma.questQuestion.create({
       data: {
@@ -1135,8 +1250,12 @@ export class WorldsService {
         measurementCategory: input.measurementCategory,
         orderNumber: input.orderNumber,
         questionText: input.questionText,
-        questionType: input.questionType ? this.parseQuestQuestionType(input.questionType) : undefined,
-        status: input.status ? this.parseQuestionStatus(input.status) : undefined,
+        questionType: input.questionType
+          ? this.parseQuestQuestionType(input.questionType)
+          : undefined,
+        status: input.status
+          ? this.parseQuestionStatus(input.status)
+          : undefined,
         stimulusText: input.stimulusText,
       },
     });
@@ -1148,16 +1267,36 @@ export class WorldsService {
       // mereferensikan questionId ini - tanpa dibersihkan dulu, delete di
       // bawah akan gagal kena constraint FK. Ini permanent delete (bukan
       // arsip), jadi jawaban siswa untuk soal ini memang ikut hilang.
-      await tx.questAnswer.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questQuestionOption.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questMatchingPair.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questOrderItem.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questAcceptedAnswer.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questRubricCriterion.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questMedia.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questHotspotArea.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questEvidenceItem.deleteMany({ where: { questQuestionId: questionId } });
-      await tx.questCodeConfig.deleteMany({ where: { questQuestionId: questionId } });
+      await tx.questAnswer.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questQuestionOption.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questMatchingPair.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questOrderItem.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questAcceptedAnswer.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questRubricCriterion.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questMedia.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questHotspotArea.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questEvidenceItem.deleteMany({
+        where: { questQuestionId: questionId },
+      });
+      await tx.questCodeConfig.deleteMany({
+        where: { questQuestionId: questionId },
+      });
       return tx.questQuestion.delete({ where: { id: questionId } });
     });
   }
