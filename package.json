@@ -12,6 +12,7 @@
     "db:push": "prisma db push",
     "seed": "node prisma/seed-runner.js",
     "import:curriculum": "node prisma/import-curriculum-runner.js",
+    "import:sample-curriculum": "node prisma/import-sample-curriculum-runner.js",
     "normalize:curriculum": "node prisma/normalize-curriculum-runner.js",
     "seed:production-content": "ts-node tools/seed-production-content.ts",
     "readiness": "ts-node tools/check-curriculum-readiness.ts"

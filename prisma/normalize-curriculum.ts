@@ -1,4 +1,12 @@
-import { MissionStatus, Prisma, PrismaClient, QuestQuestionType, QuestionStatus } from '@prisma/client';
+import {
+  CurriculumLessonType,
+  CurriculumModuleStatus,
+  MissionStatus,
+  Prisma,
+  PrismaClient,
+  QuestQuestionType,
+  QuestionStatus,
+} from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -38,6 +46,13 @@ function csv(row: Row, key: string): string[] {
     .split(/[,;]/)
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'materi';
 }
 
 function json(row: Row, key: string): Prisma.InputJsonValue | undefined {
@@ -176,7 +191,14 @@ async function main() {
   const subWorldBySourceId = new Map(subWorldRows.map((r) => [r.sub_world_id, r]));
 
   // 2. Chapter ---------------------------------------------------------------
-  const chapterBySourceId = new Map<string, { id: string }>();
+  const chapterBySourceId = new Map<string, {
+    id: string;
+    worldId: string;
+    chapterNumber: number;
+    title: string;
+    story?: string;
+    goal?: string;
+  }>();
   for (const c of chapterRows) {
     if (!c.chapter_id) continue;
     const subWorld = subWorldBySourceId.get(c.sub_world_id ?? '');
@@ -215,12 +237,26 @@ async function main() {
         status: MissionStatus.ACTIVE,
       },
     });
-    chapterBySourceId.set(c.chapter_id, chapter);
+    chapterBySourceId.set(c.chapter_id, {
+      id: chapter.id,
+      worldId: world.id,
+      chapterNumber: chapter.chapterNumber,
+      title: chapter.title,
+      story: chapter.story ?? undefined,
+      goal: chapter.goal ?? undefined,
+    });
   }
   stats.Chapter = chapterBySourceId.size;
 
   // 3. Competency + SubCompetency --------------------------------------------
-  const competencyBySourceId = new Map<string, { id: string; subjectId: string }>();
+  const competencyBySourceId = new Map<string, {
+    id: string;
+    subjectId: string;
+    chapterId: string;
+    code: string;
+    name: string;
+    description?: string;
+  }>();
   let competencyOrder = 0;
   for (const comp of competencyRows) {
     if (!comp.competency_id) continue;
@@ -248,11 +284,25 @@ async function main() {
         description: str(comp, 'description'),
       },
     });
-    competencyBySourceId.set(comp.competency_id, competency);
+    competencyBySourceId.set(comp.competency_id, {
+      id: competency.id,
+      subjectId: competency.subjectId,
+      chapterId: chapter.id,
+      code: competency.code,
+      name: competency.name,
+      description: competency.description ?? undefined,
+    });
   }
   stats.Competency = competencyBySourceId.size;
 
-  const subCompetencyBySourceId = new Map<string, { id: string }>();
+  const subCompetencyBySourceId = new Map<string, {
+    id: string;
+    competencyId: string;
+    code: string;
+    name: string;
+    learningObjective?: string;
+    indicator?: string;
+  }>();
   let subCompetencyOrder = 0;
   for (const sub of subCompetencyRows) {
     if (!sub.subcompetency_id) continue;
@@ -276,11 +326,166 @@ async function main() {
         description: str(sub, 'learning_objective'),
       },
     });
-    subCompetencyBySourceId.set(sub.subcompetency_id, subCompetency);
+    subCompetencyBySourceId.set(sub.subcompetency_id, {
+      id: subCompetency.id,
+      competencyId: competency.id,
+      code: subCompetency.code,
+      name: subCompetency.name,
+      learningObjective: str(sub, 'learning_objective'),
+      indicator: str(sub, 'indicator'),
+    });
   }
   stats.SubCompetency = subCompetencyBySourceId.size;
 
-  // 4. Quest (Daily Mission Template) ----------------------------------------
+  // 4. Materi kurikulum -------------------------------------------------------
+  let moduleCount = 0;
+  let lessonCount = 0;
+  let caseStudyCount = 0;
+  let remedialRuleCount = 0;
+  const subCompetenciesByCompetencyId = new Map<string, typeof subCompetencyBySourceId extends Map<string, infer T> ? T[] : never>();
+  for (const sub of subCompetencyBySourceId.values()) {
+    const list = subCompetenciesByCompetencyId.get(sub.competencyId) ?? [];
+    list.push(sub);
+    subCompetenciesByCompetencyId.set(sub.competencyId, list);
+  }
+  const moduleOrderByWorldId = new Map<string, number>();
+
+  for (const compRow of competencyRows) {
+    if (!compRow.competency_id) continue;
+    const competency = competencyBySourceId.get(compRow.competency_id);
+    const chapter = chapterBySourceId.get(compRow.chapter_id ?? '');
+    if (!competency || !chapter) continue;
+
+    const nextOrder = (moduleOrderByWorldId.get(chapter.worldId) ?? 0) + 1;
+    moduleOrderByWorldId.set(chapter.worldId, nextOrder);
+    const moduleSlug = slugify(compRow.competency_id);
+    const moduleTitle = competency.name;
+    const moduleGoal =
+      str(compRow, 'description') ??
+      chapter.goal ??
+      `Memahami ${moduleTitle} dan menerapkannya dalam latihan.`;
+    const module = await prisma.curriculumModule.upsert({
+      where: { worldId_slug: { worldId: chapter.worldId, slug: moduleSlug } },
+      create: {
+        worldId: chapter.worldId,
+        competencyId: competency.id,
+        slug: moduleSlug,
+        title: moduleTitle,
+        simpleGoal: moduleGoal,
+        bigIdea: chapter.goal ?? moduleGoal,
+        orderNumber: 1000 + nextOrder,
+        estimatedMinutes: 20,
+        status: CurriculumModuleStatus.ACTIVE,
+      },
+      update: {
+        competencyId: competency.id,
+        title: moduleTitle,
+        simpleGoal: moduleGoal,
+        bigIdea: chapter.goal ?? moduleGoal,
+        orderNumber: 1000 + nextOrder,
+        estimatedMinutes: 20,
+        status: CurriculumModuleStatus.ACTIVE,
+      },
+    });
+    moduleCount += 1;
+
+    const subCompetencies = subCompetenciesByCompetencyId.get(competency.id) ?? [];
+    const conceptBody = [
+      chapter.story,
+      moduleGoal,
+      subCompetencies.length
+        ? `Fokus belajar: ${subCompetencies.map((sub) => sub.name).join(', ')}.`
+        : undefined,
+    ].filter(Boolean).join('\n\n');
+    const checklistItems = subCompetencies.map(
+      (sub) => sub.learningObjective ?? sub.indicator ?? `Kuasai ${sub.name}.`,
+    );
+
+    const lessons = [
+      {
+        orderNumber: 1,
+        type: CurriculumLessonType.CONCEPT,
+        title: `Inti materi: ${moduleTitle}`,
+        body: conceptBody || `Pelajari konsep utama ${moduleTitle} sebelum mengerjakan pertanyaan.`,
+        examples: subCompetencies.map((sub) => sub.indicator).filter((item): item is string => Boolean(item)),
+        items: [],
+      },
+      {
+        orderNumber: 2,
+        type: CurriculumLessonType.CHECKLIST,
+        title: `Yang perlu kamu bisa`,
+        body: `Gunakan daftar ini untuk mengecek kesiapan sebelum masuk pertanyaan.`,
+        examples: [],
+        items: checklistItems.length ? checklistItems : [moduleGoal],
+      },
+      {
+        orderNumber: 3,
+        type: CurriculumLessonType.EXAMPLE,
+        title: `Contoh penerapan`,
+        body: `Bayangkan kamu sedang menjalankan misi di ${chapter.title}. Pakai konsep ${moduleTitle} untuk membaca petunjuk, membandingkan bukti, lalu memilih jawaban yang paling masuk akal.`,
+        examples: missionRows
+          .filter((mission) => {
+            const sub = subCompetencyBySourceId.get(mission.subcompetency_id ?? '');
+            return sub?.competencyId === competency.id;
+          })
+          .map((mission) => mission.objective)
+          .filter((item): item is string => Boolean(item))
+          .slice(0, 3),
+        items: [],
+      },
+    ];
+
+    for (const lesson of lessons) {
+      await prisma.curriculumLesson.upsert({
+        where: { moduleId_orderNumber: { moduleId: module.id, orderNumber: lesson.orderNumber } },
+        create: { moduleId: module.id, ...lesson },
+        update: lesson,
+      });
+      lessonCount += 1;
+    }
+
+    await prisma.curriculumCaseStudy.upsert({
+      where: { moduleId_orderNumber: { moduleId: module.id, orderNumber: 1 } },
+      create: {
+        moduleId: module.id,
+        orderNumber: 1,
+        title: `Kasus singkat: ${chapter.title}`,
+        story: chapter.story ?? `Ada masalah di ${chapter.title}. Gunakan ${moduleTitle} untuk menemukan penyebabnya.`,
+        analysisSteps: checklistItems.slice(0, 4),
+        commonMistake: `Menjawab dari hafalan kata kunci tanpa menghubungkan struktur, fungsi, dan bukti pada soal.`,
+      },
+      update: {
+        title: `Kasus singkat: ${chapter.title}`,
+        story: chapter.story ?? `Ada masalah di ${chapter.title}. Gunakan ${moduleTitle} untuk menemukan penyebabnya.`,
+        analysisSteps: checklistItems.slice(0, 4),
+        commonMistake: `Menjawab dari hafalan kata kunci tanpa menghubungkan struktur, fungsi, dan bukti pada soal.`,
+      },
+    });
+    caseStudyCount += 1;
+
+    const existingRule = await prisma.remedialRule.findFirst({
+      where: { moduleId: module.id, recommendationTitle: `Ulangi materi ${moduleTitle}` },
+    });
+    const remedialData = {
+      competencyId: competency.id,
+      minScoreExclusive: 60,
+      recommendationTitle: `Ulangi materi ${moduleTitle}`,
+      recommendationMessage: `Baca ringkasan materi, cek daftar kemampuan, lalu kerjakan latihan serupa sampai bukti pemahaman cukup.`,
+      actionType: 'RETRY_TEMPLATE_QUEST',
+    };
+    if (existingRule) {
+      await prisma.remedialRule.update({ where: { id: existingRule.id }, data: remedialData });
+    } else {
+      await prisma.remedialRule.create({ data: { moduleId: module.id, ...remedialData } });
+    }
+    remedialRuleCount += 1;
+  }
+  stats.CurriculumModule = moduleCount;
+  stats.CurriculumLesson = lessonCount;
+  stats.CurriculumCaseStudy = caseStudyCount;
+  stats.RemedialRule = remedialRuleCount;
+
+  // 5. Quest (Daily Mission Template) ----------------------------------------
   const questBySourceId = new Map<string, { id: string }>();
   for (const m of missionRows) {
     if (!m.mission_id) continue;
@@ -641,6 +846,128 @@ async function main() {
     codeConfigCount += 1;
   }
   stats.QuestCodeConfig = codeConfigCount;
+
+  const MIN_ACTIVE_QUEST_QUESTIONS = 10;
+  const activeQuests = await prisma.quest.findMany({
+    where: { status: MissionStatus.ACTIVE },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      _count: { select: { questions: { where: { status: QuestionStatus.ACTIVE } } } },
+      chapter: {
+        select: {
+          id: true,
+          title: true,
+          goal: true,
+          competencies: { select: { id: true, name: true, description: true } },
+        },
+      },
+      subCompetency: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          competency: { select: { id: true, name: true, description: true } },
+        },
+      },
+    },
+  });
+
+  let generatedTemplateQuestionCount = 0;
+  let generatedTemplateOptionCount = 0;
+  for (const quest of activeQuests) {
+    const missing = Math.max(0, MIN_ACTIVE_QUEST_QUESTIONS - quest._count.questions);
+    if (missing === 0) continue;
+
+    const competency =
+      quest.subCompetency?.competency ??
+      quest.chapter?.competencies[0] ??
+      null;
+    if (!competency) {
+      console.warn(`Skip template question untuk quest ${quest.code}: tidak ada kompetensi.`);
+      continue;
+    }
+
+    for (let i = 1; i <= missing; i += 1) {
+      const orderNumber = quest._count.questions + i;
+      const code = `${quest.code}_TPL_Q${String(orderNumber).padStart(3, '0')}`;
+      const focus = quest.subCompetency?.name ?? competency.name;
+      const questionText =
+        i % 3 === 1
+          ? `Apa tujuan utama belajar "${focus}" dalam misi ini?`
+          : i % 3 === 2
+            ? `Sebelum menjawab soal tentang "${focus}", hal apa yang paling perlu diperhatikan?`
+            : `Manakah pernyataan yang paling tepat tentang hubungan materi "${focus}" dengan misi "${quest.title}"?`;
+      const correctLabel =
+        i % 3 === 1
+          ? quest.objective ?? competency.description ?? `Memahami ${focus} dan menerapkannya pada masalah.`
+          : i % 3 === 2
+            ? `Baca petunjuk, cocokkan bukti, lalu hubungkan dengan konsep ${focus}.`
+            : `Materi membantu memilih jawaban berdasarkan alasan, bukan tebakan.`;
+      const distractors = [
+        `Langsung memilih jawaban tanpa membaca stimulus.`,
+        `Menghafal istilah tanpa melihat konteks soal.`,
+        `Mengabaikan instruksi karena semua pertanyaan pasti sama.`,
+      ];
+
+      const question = await prisma.questQuestion.upsert({
+        where: { code },
+        create: {
+          questId: quest.id,
+          code,
+          questionType: QuestQuestionType.SINGLE_CHOICE,
+          competencyId: competency.id,
+          subCompetencyId: quest.subCompetencyId,
+          measurementCategory: 'Pemahaman Materi',
+          difficulty: 'Easy',
+          bloomLevel: 'Understand',
+          orderNumber,
+          questionText,
+          stimulusText: quest.story ?? quest.chapter?.goal ?? undefined,
+          instruction: 'Pilih satu jawaban yang paling tepat.',
+          skillTags: ['materi-template', slugify(focus)],
+          masteryPoint: 1,
+          xpReward: 1,
+          estimatedTimeSeconds: 45,
+          status: QuestionStatus.ACTIVE,
+        },
+        update: {
+          questionType: QuestQuestionType.SINGLE_CHOICE,
+          competencyId: competency.id,
+          subCompetencyId: quest.subCompetencyId,
+          measurementCategory: 'Pemahaman Materi',
+          difficulty: 'Easy',
+          bloomLevel: 'Understand',
+          orderNumber,
+          questionText,
+          stimulusText: quest.story ?? quest.chapter?.goal ?? undefined,
+          instruction: 'Pilih satu jawaban yang paling tepat.',
+          skillTags: ['materi-template', slugify(focus)],
+          masteryPoint: 1,
+          xpReward: 1,
+          estimatedTimeSeconds: 45,
+          status: QuestionStatus.ACTIVE,
+        },
+      });
+
+      await prisma.questQuestionOption.deleteMany({ where: { questQuestionId: question.id } });
+      await prisma.questQuestionOption.createMany({
+        data: [
+          { optionId: 'A', label: correctLabel, isCorrect: true, displayOrder: 1 },
+          { optionId: 'B', label: distractors[0], isCorrect: false, displayOrder: 2 },
+          { optionId: 'C', label: distractors[1], isCorrect: false, displayOrder: 3 },
+          { optionId: 'D', label: distractors[2], isCorrect: false, displayOrder: 4 },
+        ].map((option) => ({
+          questQuestionId: question.id,
+          ...option,
+          misconception: option.isCorrect ? undefined : 'Coba baca ulang materi dan instruksi misi.',
+        })),
+      });
+      generatedTemplateQuestionCount += 1;
+      generatedTemplateOptionCount += 4;
+    }
+  }
+  stats.GeneratedQuestQuestionTemplate = generatedTemplateQuestionCount;
+  stats.GeneratedQuestQuestionTemplateOption = generatedTemplateOptionCount;
 
   const placementQuestions = await prisma.questQuestion.findMany({
     where: { code: { in: [...questionBySourceId.keys()] }, status: QuestionStatus.ACTIVE },
