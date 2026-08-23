@@ -22,7 +22,7 @@ interface CurriculumExport {
 }
 
 async function main() {
-  const jsonPath = join(__dirname, 'curriculum-data.json');
+  const jsonPath = join(process.cwd(), 'prisma', 'curriculum-data.json');
   const data: CurriculumExport = JSON.parse(readFileSync(jsonPath, 'utf-8'));
 
   let imported = 0;
