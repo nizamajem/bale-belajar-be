@@ -16,8 +16,8 @@
     "normalize:curriculum": "node prisma/normalize-curriculum-runner.js",
     "prepare:curriculum": "npm run import:curriculum && npm run seed:production-content && npm run normalize:curriculum && npm run readiness",
     "prepare:sample-curriculum": "npm run import:sample-curriculum && npm run seed:production-content && npm run normalize:curriculum && npm run readiness",
-    "seed:production-content": "ts-node tools/seed-production-content.ts",
-    "readiness": "ts-node tools/check-curriculum-readiness.ts"
+    "seed:production-content": "node tools/seed-production-content-runner.js",
+    "readiness": "node tools/check-curriculum-readiness-runner.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.5",
