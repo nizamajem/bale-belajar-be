@@ -51,6 +51,15 @@ enum VocabDisplayLanguage {
   BOTH
 }
 
+// QUEST = dunia kurikulum biasa (Numeria, Detectivia, dst - punya Chapter/Quest
+// sendiri). VOCAB = dunia yang kontennya dari bank VocabWord/VocabCategory
+// (lihat WorldsService.findAllForStudent) - "misi harian"-nya adalah kosakata
+// hari ini, bukan Quest, jadi TIDAK butuh Chapter/Quest sama sekali.
+enum WorldKind {
+  QUEST
+  VOCAB
+}
+
 enum QuestionDifficulty {
   EASY
   MEDIUM
@@ -829,16 +838,17 @@ model AuditLog {
 // =========================================================================
 
 model World {
-  id               String   @id @default(uuid()) @db.Uuid
-  subjectId        String   @db.Uuid
-  key              String   @unique
+  id               String    @id @default(uuid()) @db.Uuid
+  subjectId        String    @db.Uuid
+  key              String    @unique
+  kind             WorldKind @default(QUEST)
   name             String
   characterClass   String
   themeDescription String?
-  isActive         Boolean  @default(true)
-  orderNumber      Int      @default(1)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  isActive         Boolean   @default(true)
+  orderNumber      Int       @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   subject            Subject                  @relation(fields: [subjectId], references: [id])
   worldProgress      StudentWorldProgress[]
@@ -1628,7 +1638,7 @@ model VocabWord {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  category   VocabCategory           @relation(fields: [categoryId], references: [id])
+  category   VocabCategory          @relation(fields: [categoryId], references: [id])
   deliveries StudentVocabDelivery[]
 
   @@unique([categoryId, english])

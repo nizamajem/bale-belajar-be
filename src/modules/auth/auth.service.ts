@@ -13,6 +13,7 @@ import * as bcrypt from "bcrypt";
 import { PrismaService } from "../../database/prisma/prisma.service";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { AddRoleDto } from "./dto/add-role.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterStudentDto } from "./dto/register-student.dto";
@@ -383,6 +384,39 @@ export class AuthService {
       role: currentUser.role,
       roles: this.getHeldRoles({ role: user.role, additionalRoles }),
     };
+  }
+
+  /**
+   * Ganti password akun sendiri. Akun yang login murni lewat Google (tidak
+   * pernah set password) tidak punya `passwordHash` - ditolak dengan pesan
+   * jelas alih-alih membandingkan ke hash kosong.
+   */
+  async changePassword(
+    currentUser: AuthenticatedUser,
+    dto: ChangePasswordDto,
+  ): Promise<{ status: "ok" }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: currentUser.id },
+    });
+
+    if (!user || !user.passwordHash) {
+      throw new BadRequestException(
+        "Akun ini belum punya password (login lewat Google). Hubungi admin untuk bantuan.",
+      );
+    }
+
+    const isCurrentValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!isCurrentValid) {
+      throw new UnauthorizedException("Password saat ini salah.");
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, PASSWORD_HASH_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    return { status: "ok" };
   }
 
   /**

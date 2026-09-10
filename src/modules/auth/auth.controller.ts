@@ -11,6 +11,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { AuthService } from "./auth.service";
 import { AddRoleDto } from "./dto/add-role.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { GoogleLoginDto } from "./dto/google-login.dto";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterStudentDto } from "./dto/register-student.dto";
@@ -96,11 +97,12 @@ export class AuthController {
   @Post("change-password")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ResponseMessage("Change password belum diaktifkan.")
-  changePassword() {
-    return {
-      status: "not_implemented",
-    };
+  @ResponseMessage("Password berhasil diubah.")
+  changePassword(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(currentUser, dto);
   }
 }
 

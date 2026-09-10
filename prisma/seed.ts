@@ -11,8 +11,10 @@ import {
   QuestionType,
   UserRole,
   VocabLevel,
+  WorldKind,
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { buildVocabSeed } from "./vocab-seed-data";
 
 const prisma = new PrismaClient();
 
@@ -2173,26 +2175,19 @@ const VOCAB_SEED: { key: string; name: string; words: VocabWordSeed[] }[] = [
 ];
 
 async function seedVocab() {
-  for (const categorySeed of VOCAB_SEED) {
+  const vocabSeed = buildVocabSeed(20_000);
+
+  for (const categorySeed of vocabSeed) {
     const category = await prisma.vocabCategory.upsert({
       where: { key: categorySeed.key },
-      update: { name: categorySeed.name },
-      create: { key: categorySeed.key, name: categorySeed.name },
+      update: { name: categorySeed.name, isActive: true },
+      create: { key: categorySeed.key, name: categorySeed.name, isActive: true },
     });
 
-    for (const word of categorySeed.words) {
-      await prisma.vocabWord.upsert({
-        where: {
-          categoryId_english: { categoryId: category.id, english: word.english },
-        },
-        update: {
-          korean: word.korean,
-          koreanRomanized: word.koreanRomanized,
-          exampleSentenceEn: word.exampleSentenceEn,
-          exampleSentenceKo: word.exampleSentenceKo,
-          level: word.level,
-        },
-        create: {
+    for (let index = 0; index < categorySeed.words.length; index += 500) {
+      const chunk = categorySeed.words.slice(index, index + 500);
+      await prisma.vocabWord.createMany({
+        data: chunk.map((word) => ({
           categoryId: category.id,
           english: word.english,
           korean: word.korean,
@@ -2200,7 +2195,9 @@ async function seedVocab() {
           exampleSentenceEn: word.exampleSentenceEn,
           exampleSentenceKo: word.exampleSentenceKo,
           level: word.level,
-        },
+          isActive: true,
+        })),
+        skipDuplicates: true,
       });
     }
   }
