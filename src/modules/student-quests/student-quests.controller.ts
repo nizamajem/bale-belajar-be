@@ -9,6 +9,7 @@ import { RolesGuard } from "../../common/guards/roles.guard";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { GetTodayQuestQueryDto } from "./dto/get-today-quest-query.dto";
 import { SaveQuestAnswerDto } from "./dto/save-quest-answer.dto";
+import { UpdateQuestSettingDto } from "./dto/update-quest-setting.dto";
 import { StudentQuestsService } from "./student-quests.service";
 
 @ApiTags("Student Quests")
@@ -26,6 +27,39 @@ export class StudentQuestsController {
     @Query() query: GetTodayQuestQueryDto,
   ) {
     return this.studentQuestsService.getTodayQuest(currentUser, query.worldKey);
+  }
+
+  @Get("quests/setting")
+  @ResponseMessage("Pengaturan jumlah misi harian berhasil diambil.")
+  getSetting(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.studentQuestsService.getSetting(currentUser);
+  }
+
+  @Put("quests/setting")
+  @ResponseMessage("Pengaturan jumlah misi harian berhasil diperbarui.")
+  updateSetting(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: UpdateQuestSettingDto,
+  ) {
+    return this.studentQuestsService.updateSetting(currentUser, dto);
+  }
+
+  @Get("quests/today-all")
+  @ResponseMessage("Semua misi hari ini berhasil diambil.")
+  getTodayAll(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: GetTodayQuestQueryDto,
+  ) {
+    return this.studentQuestsService.getTodayAll(currentUser, query.worldKey);
+  }
+
+  @Post("quests/next")
+  @ResponseMessage("Misi tambahan berhasil diambil.")
+  requestNextQuest(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query() query: GetTodayQuestQueryDto,
+  ) {
+    return this.studentQuestsService.requestNextQuest(currentUser, query.worldKey);
   }
 
   @Post("quests/:assignmentId/start")

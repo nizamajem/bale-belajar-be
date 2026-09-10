@@ -10,6 +10,7 @@ import { PrismaService } from "../../database/prisma/prisma.service";
 import { ExperienceLedgerService } from "../experience-ledger/experience-ledger.service";
 import { MasteryService } from "../mastery/mastery.service";
 import { SaveQuestAnswerDto } from "./dto/save-quest-answer.dto";
+import { UpdateQuestSettingDto } from "./dto/update-quest-setting.dto";
 import {
   QuestAnswerEvaluationResult,
   QuestAnswerPayload,
@@ -72,10 +73,11 @@ export class StudentQuestsService {
 
     let assignment = await this.prisma.questAssignment.findUnique({
       where: {
-        studentProfileId_worldId_assignedDate: {
+        studentProfileId_worldId_assignedDate_sequenceNumber: {
           studentProfileId,
           worldId: world.id,
           assignedDate,
+          sequenceNumber: 1,
         },
       },
       include: assignmentInclude,
@@ -85,7 +87,7 @@ export class StudentQuestsService {
       assignment &&
       assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS
     ) {
-      const replacementQuest = await this.pickQuestForToday(world.id, assignment.questId)
+      const replacementQuest = await this.pickQuestForToday(world.id, [assignment.questId])
         .catch(() => this.pickQuestFromAnyReadyWorld(assignment!.questId));
       if (replacementQuest.id !== assignment.questId) {
         await this.prisma.$transaction(async (tx) => {
@@ -104,10 +106,11 @@ export class StudentQuestsService {
         });
         assignment = await this.prisma.questAssignment.findUnique({
           where: {
-            studentProfileId_worldId_assignedDate: {
+            studentProfileId_worldId_assignedDate_sequenceNumber: {
               studentProfileId,
               worldId: replacementQuest.worldId,
               assignedDate,
+              sequenceNumber: 1,
             },
           },
           include: assignmentInclude,
@@ -139,6 +142,119 @@ export class StudentQuestsService {
     }
 
     return this.serializeAssignment(assignment);
+  }
+
+  // --- Pengaturan "berapa misi per hari" ---
+
+  async getSetting(currentUser: AuthenticatedUser) {
+    const setting = await this.getOrCreateQuestSetting(
+      this.getStudentProfileId(currentUser),
+    );
+    return { dailyQuestCount: setting.dailyQuestCount };
+  }
+
+  async updateSetting(currentUser: AuthenticatedUser, dto: UpdateQuestSettingDto) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    await this.getOrCreateQuestSetting(studentProfileId);
+    const updated = await this.prisma.studentQuestSetting.update({
+      where: { studentProfileId },
+      data: { dailyQuestCount: dto.dailyQuestCount },
+    });
+    return { dailyQuestCount: updated.dailyQuestCount };
+  }
+
+  /** Semua assignment hari ini untuk satu dunia (sequence 1..N) - buat progress "misi 2/3 selesai". */
+  async getTodayAll(currentUser: AuthenticatedUser, worldKey: string) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    const world = await this.resolvePlayableWorld(worldKey);
+    if (!world) {
+      throw new NotFoundException(
+        `Belum ada world yang punya misi aktif minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan.`,
+      );
+    }
+    const assignedDate = startOfDay(new Date());
+    const setting = await this.getOrCreateQuestSetting(studentProfileId);
+
+    const assignments = await this.prisma.questAssignment.findMany({
+      where: { studentProfileId, worldId: world.id, assignedDate },
+      orderBy: { sequenceNumber: "asc" },
+      include: assignmentInclude,
+    });
+
+    return {
+      dailyQuestCount: setting.dailyQuestCount,
+      assignments: assignments.map((assignment) => this.serializeAssignment(assignment)),
+      canRequestNext:
+        assignments.length < setting.dailyQuestCount &&
+        (assignments.length === 0 ||
+          assignments[assignments.length - 1].attempt?.status === AttemptStatus.SUBMITTED),
+    };
+  }
+
+  /**
+   * Misi tambahan hari ini (sequence 2+) - hanya kalau belum menyentuh batas
+   * StudentQuestSetting.dailyQuestCount DAN misi paling akhir sudah
+   * SUBMITTED (tidak boleh minta misi baru sambil masih ada yang mengambang).
+   */
+  async requestNextQuest(currentUser: AuthenticatedUser, worldKey: string) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    const world = await this.resolvePlayableWorld(worldKey);
+    if (!world) {
+      throw new NotFoundException(
+        `Belum ada world yang punya misi aktif minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan.`,
+      );
+    }
+    const assignedDate = startOfDay(new Date());
+    const setting = await this.getOrCreateQuestSetting(studentProfileId);
+
+    const todayAssignments = await this.prisma.questAssignment.findMany({
+      where: { studentProfileId, worldId: world.id, assignedDate },
+      orderBy: { sequenceNumber: "asc" },
+      include: { attempt: true },
+    });
+
+    if (todayAssignments.length === 0) {
+      throw new BadRequestException(
+        "Ambil misi hari ini dulu lewat GET /student/quests/today sebelum minta misi tambahan.",
+      );
+    }
+    if (todayAssignments.length >= setting.dailyQuestCount) {
+      throw new BadRequestException(
+        `Sudah mencapai batas ${setting.dailyQuestCount} misi hari ini. Ubah di pengaturan kalau mau lebih banyak.`,
+      );
+    }
+    const lastAssignment = todayAssignments[todayAssignments.length - 1];
+    if (lastAssignment.attempt?.status !== AttemptStatus.SUBMITTED) {
+      throw new BadRequestException(
+        "Selesaikan misi yang sedang berjalan dulu sebelum minta misi tambahan.",
+      );
+    }
+
+    const usedQuestIds = todayAssignments.map((assignment) => assignment.questId);
+    const quest = await this.pickQuestForToday(world.id, usedQuestIds).catch(() =>
+      this.pickQuestForToday(world.id),
+    );
+
+    const assignment = await this.prisma.questAssignment.create({
+      data: {
+        studentProfileId,
+        worldId: world.id,
+        questId: quest.id,
+        assignedDate,
+        sequenceNumber: lastAssignment.sequenceNumber + 1,
+      },
+      include: assignmentInclude,
+    });
+
+    return this.serializeAssignment(assignment);
+  }
+
+  private async getOrCreateQuestSetting(studentProfileId: string) {
+    const existing = await this.prisma.studentQuestSetting.findUnique({
+      where: { studentProfileId },
+    });
+    if (existing) return existing;
+    return this.prisma.studentQuestSetting.create({ data: { studentProfileId } });
   }
 
   async startAttempt(currentUser: AuthenticatedUser, assignmentId: string) {
@@ -326,12 +442,12 @@ export class StudentQuestsService {
     };
   }
 
-  private async pickQuestForToday(worldId: string, excludeQuestId?: string) {
+  private async pickQuestForToday(worldId: string, excludeQuestIds?: string[]) {
     const activeQuests = await this.prisma.quest.findMany({
       where: {
         worldId,
         status: "ACTIVE",
-        ...(excludeQuestId ? { id: { not: excludeQuestId } } : {}),
+        ...(excludeQuestIds?.length ? { id: { notIn: excludeQuestIds } } : {}),
         questions: { some: { status: "ACTIVE" } },
       },
       orderBy: { createdAt: "asc" },
