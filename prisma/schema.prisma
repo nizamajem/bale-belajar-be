@@ -39,6 +39,18 @@ enum LeadStatus {
   CONVERTED
 }
 
+enum VocabLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum VocabDisplayLanguage {
+  EN_TO_KO
+  KO_TO_EN
+  BOTH
+}
+
 enum QuestionDifficulty {
   EASY
   MEDIUM
@@ -313,6 +325,8 @@ model StudentProfile {
   onboarding         StudentOnboarding?
   placementAttempts  PlacementAttempt[]
   questAssignments   QuestAssignment[]
+  vocabSetting       StudentVocabSetting?
+  vocabDeliveries    StudentVocabDelivery[]
 
   @@index([schoolId])
   @@index([academicYear])
@@ -1584,4 +1598,78 @@ model QuestAnswer {
 
   @@unique([questAttemptId, questQuestionId])
   @@index([questQuestionId])
+}
+
+// --- Vocab (kosakata Inggris-Korea harian: notifikasi + widget) ---
+
+model VocabCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  words VocabWord[]
+
+  @@index([isActive])
+}
+
+model VocabWord {
+  id                String     @id @default(uuid()) @db.Uuid
+  categoryId        String     @db.Uuid
+  english           String
+  korean            String
+  koreanRomanized   String?
+  exampleSentenceEn String?
+  exampleSentenceKo String?
+  level             VocabLevel @default(BEGINNER)
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  category   VocabCategory           @relation(fields: [categoryId], references: [id])
+  deliveries StudentVocabDelivery[]
+
+  @@unique([categoryId, english])
+  @@index([categoryId])
+  @@index([level])
+  @@index([isActive])
+}
+
+// Preferensi tampilan + jadwal siswa. Satu baris per siswa, dibuat otomatis
+// dengan default saat pertama kali diakses (lihat VocabService.getOrCreateSetting).
+model StudentVocabSetting {
+  id                    String               @id @default(uuid()) @db.Uuid
+  studentProfileId      String               @unique @db.Uuid
+  dailyCount            Int                  @default(5)
+  displayLanguage       VocabDisplayLanguage @default(BOTH)
+  notificationEnabled   Boolean              @default(true)
+  widgetEnabled         Boolean              @default(true)
+  notificationStartHour Int                  @default(8)
+  notificationEndHour   Int                  @default(20)
+  // Array kosong = semua level/kategori diizinkan (tidak difilter).
+  levels                VocabLevel[]         @default([BEGINNER, INTERMEDIATE])
+  categoryKeys          String[]             @default([])
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id])
+}
+
+// Set kata yang "dijatah" untuk siswa pada tanggal tertentu - dibuat sekali per
+// hari (lihat VocabService.getDailyWords) supaya notifikasi, widget, dan layar
+// app menampilkan kata yang sama sepanjang hari itu, dan tidak segera berulang.
+model StudentVocabDelivery {
+  id               String   @id @default(uuid()) @db.Uuid
+  studentProfileId String   @db.Uuid
+  vocabWordId      String   @db.Uuid
+  deliveryDate     DateTime @db.Date
+  createdAt        DateTime @default(now())
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id])
+  vocabWord      VocabWord      @relation(fields: [vocabWordId], references: [id])
+
+  @@unique([studentProfileId, vocabWordId, deliveryDate])
+  @@index([studentProfileId, deliveryDate])
 }
