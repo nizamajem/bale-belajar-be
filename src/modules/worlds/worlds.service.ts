@@ -9,6 +9,7 @@ import {
   MissionStatus,
   QuestionStatus,
   QuestQuestionType,
+  WorldKind,
 } from "@prisma/client";
 import { AuthenticatedUser } from "../../common/types/authenticated-user.type";
 import { PrismaService } from "../../database/prisma/prisma.service";
@@ -256,8 +257,18 @@ export class WorldsService {
     const worlds = await this.prisma.world.findMany({
       where: {
         isActive: true,
-        quests: { some: { status: "ACTIVE" } },
-        chapters: { some: {} },
+        // World kind VOCAB (mis. Dunia Korea/Inggris) tidak punya
+        // Quest/Chapter sama sekali - "misinya" adalah kosakata harian dari
+        // modul vocab (lihat VocabModule) - jadi syarat kesiapan quest di
+        // bawah cuma berlaku untuk world kind QUEST (default).
+        OR: [
+          {
+            kind: WorldKind.QUEST,
+            quests: { some: { status: "ACTIVE" } },
+            chapters: { some: {} },
+          },
+          { kind: WorldKind.VOCAB },
+        ],
       },
       include: {
         subject: { select: { id: true, code: true, name: true } },
@@ -293,6 +304,7 @@ export class WorldsService {
         return {
           id: world.id,
           key: world.key,
+          kind: world.kind,
           name: world.name,
           characterClass: world.characterClass,
           themeDescription: world.themeDescription,
@@ -304,7 +316,9 @@ export class WorldsService {
         };
       })
       .filter(
-        (world) => world.activeQuestionCount >= MIN_ACTIVE_QUEST_QUESTIONS,
+        (world) =>
+          world.kind === WorldKind.VOCAB ||
+          world.activeQuestionCount >= MIN_ACTIVE_QUEST_QUESTIONS,
       );
   }
 

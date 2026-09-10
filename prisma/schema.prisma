@@ -334,6 +334,7 @@ model StudentProfile {
   onboarding         StudentOnboarding?
   placementAttempts  PlacementAttempt[]
   questAssignments   QuestAssignment[]
+  questSetting       StudentQuestSetting?
   vocabSetting       StudentVocabSetting?
   vocabDeliveries    StudentVocabDelivery[]
 
@@ -1561,6 +1562,12 @@ model QuestAssignment {
   worldId          String           @db.Uuid
   questId          String           @db.Uuid
   assignedDate     DateTime         @db.Date
+  // Misi ke berapa hari itu untuk world ini - 1 = "misi hari ini" (perilaku
+  // lama, dipakai apa adanya oleh GET /student/quests/today), 2+ = misi
+  // tambahan lewat POST /student/quests/next kalau StudentQuestSetting
+  // .dailyQuestCount siswa itu > 1. Additive: baris lama otomatis dapat
+  // default 1, jadi tetap kompatibel dengan perilaku sebelum kolom ini ada.
+  sequenceNumber   Int              @default(1)
   status           AssignmentStatus @default(ASSIGNED)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -1570,8 +1577,22 @@ model QuestAssignment {
   quest   Quest          @relation(fields: [questId], references: [id])
   attempt QuestAttempt?
 
-  @@unique([studentProfileId, worldId, assignedDate])
+  @@unique([studentProfileId, worldId, assignedDate, sequenceNumber])
   @@index([questId])
+  @@index([studentProfileId, worldId, assignedDate])
+}
+
+// Preferensi "berapa misi per hari" siswa - dibuat otomatis dengan default
+// saat pertama kali diakses (lihat StudentQuestsService.getOrCreateSetting),
+// pola sama seperti StudentVocabSetting.
+model StudentQuestSetting {
+  id               String   @id @default(uuid()) @db.Uuid
+  studentProfileId String   @unique @db.Uuid
+  dailyQuestCount  Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  studentProfile StudentProfile @relation(fields: [studentProfileId], references: [id])
 }
 
 model QuestAttempt {

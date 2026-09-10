@@ -21,4 +21,4 @@ COPY --from=build /app/tools ./tools
 COPY --from=build /app/public ./public
 
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && if [ \"${PREPARE_CURRICULUM_ON_START:-true}\" = \"true\" ]; then npm run prepare:curriculum; fi && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss && if [ \"${PREPARE_CURRICULUM_ON_START:-true}\" = \"true\" ]; then npm run prepare:curriculum; fi && if [ \"${SEED_VOCAB_ON_START:-true}\" = \"true\" ]; then npm run seed:vocab; fi && node dist/main.js"]

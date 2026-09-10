@@ -10,7 +10,6 @@ import {
   QuestionStatus,
   QuestionType,
   UserRole,
-  VocabLevel,
   WorldKind,
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
@@ -2076,103 +2075,8 @@ async function seedBaleDetective() {
   }
 
   await seedVocab();
+  await seedVocabWorlds();
 }
-
-type VocabWordSeed = {
-  english: string;
-  korean: string;
-  koreanRomanized: string;
-  level: VocabLevel;
-  exampleSentenceEn?: string;
-  exampleSentenceKo?: string;
-};
-
-const VOCAB_SEED: { key: string; name: string; words: VocabWordSeed[] }[] = [
-  {
-    key: "greetings",
-    name: "Sapaan",
-    words: [
-      { english: "hello", korean: "안녕하세요", koreanRomanized: "annyeonghaseyo", level: VocabLevel.BEGINNER },
-      { english: "goodbye", korean: "안녕히 가세요", koreanRomanized: "annyeonghi gaseyo", level: VocabLevel.BEGINNER },
-      { english: "thank you", korean: "감사합니다", koreanRomanized: "gamsahamnida", level: VocabLevel.BEGINNER },
-      { english: "sorry", korean: "죄송합니다", koreanRomanized: "joesonghamnida", level: VocabLevel.BEGINNER },
-      { english: "yes", korean: "네", koreanRomanized: "ne", level: VocabLevel.BEGINNER },
-      { english: "no", korean: "아니요", koreanRomanized: "aniyo", level: VocabLevel.BEGINNER },
-      { english: "nice to meet you", korean: "반갑습니다", koreanRomanized: "bangapseumnida", level: VocabLevel.BEGINNER },
-      { english: "see you later", korean: "또 봐요", koreanRomanized: "tto bwayo", level: VocabLevel.INTERMEDIATE },
-    ],
-  },
-  {
-    key: "daily-life",
-    name: "Kehidupan Sehari-hari",
-    words: [
-      { english: "water", korean: "물", koreanRomanized: "mul", level: VocabLevel.BEGINNER },
-      { english: "house", korean: "집", koreanRomanized: "jip", level: VocabLevel.BEGINNER },
-      { english: "friend", korean: "친구", koreanRomanized: "chingu", level: VocabLevel.BEGINNER },
-      { english: "today", korean: "오늘", koreanRomanized: "oneul", level: VocabLevel.BEGINNER },
-      { english: "tomorrow", korean: "내일", koreanRomanized: "naeil", level: VocabLevel.BEGINNER },
-      { english: "weather", korean: "날씨", koreanRomanized: "nalssi", level: VocabLevel.INTERMEDIATE },
-      { english: "busy", korean: "바쁘다", koreanRomanized: "bappeuda", level: VocabLevel.INTERMEDIATE },
-      { english: "tired", korean: "피곤하다", koreanRomanized: "pigonhada", level: VocabLevel.INTERMEDIATE },
-    ],
-  },
-  {
-    key: "food",
-    name: "Makanan",
-    words: [
-      { english: "rice", korean: "밥", koreanRomanized: "bap", level: VocabLevel.BEGINNER },
-      { english: "delicious", korean: "맛있다", koreanRomanized: "masitda", level: VocabLevel.BEGINNER },
-      { english: "restaurant", korean: "식당", koreanRomanized: "sikdang", level: VocabLevel.BEGINNER },
-      { english: "coffee", korean: "커피", koreanRomanized: "keopi", level: VocabLevel.BEGINNER },
-      { english: "fruit", korean: "과일", koreanRomanized: "gwail", level: VocabLevel.BEGINNER },
-      { english: "spicy", korean: "맵다", koreanRomanized: "maepda", level: VocabLevel.INTERMEDIATE },
-      { english: "breakfast", korean: "아침 식사", koreanRomanized: "achim siksa", level: VocabLevel.INTERMEDIATE },
-      { english: "vegetable", korean: "야채", koreanRomanized: "yachae", level: VocabLevel.INTERMEDIATE },
-    ],
-  },
-  {
-    key: "school",
-    name: "Sekolah",
-    words: [
-      { english: "school", korean: "학교", koreanRomanized: "hakgyo", level: VocabLevel.BEGINNER },
-      { english: "teacher", korean: "선생님", koreanRomanized: "seonsaengnim", level: VocabLevel.BEGINNER },
-      { english: "student", korean: "학생", koreanRomanized: "haksaeng", level: VocabLevel.BEGINNER },
-      { english: "book", korean: "책", koreanRomanized: "chaek", level: VocabLevel.BEGINNER },
-      { english: "homework", korean: "숙제", koreanRomanized: "sukje", level: VocabLevel.BEGINNER },
-      { english: "test", korean: "시험", koreanRomanized: "siheom", level: VocabLevel.INTERMEDIATE },
-      { english: "to study", korean: "공부하다", koreanRomanized: "gongbuhada", level: VocabLevel.INTERMEDIATE },
-      { english: "classroom", korean: "교실", koreanRomanized: "gyosil", level: VocabLevel.BEGINNER },
-    ],
-  },
-  {
-    key: "family",
-    name: "Keluarga",
-    words: [
-      { english: "family", korean: "가족", koreanRomanized: "gajok", level: VocabLevel.BEGINNER },
-      { english: "mother", korean: "어머니", koreanRomanized: "eomeoni", level: VocabLevel.BEGINNER },
-      { english: "father", korean: "아버지", koreanRomanized: "abeoji", level: VocabLevel.BEGINNER },
-      { english: "older sibling", korean: "형제", koreanRomanized: "hyeongje", level: VocabLevel.INTERMEDIATE },
-      { english: "child", korean: "아이", koreanRomanized: "ai", level: VocabLevel.BEGINNER },
-      { english: "grandmother", korean: "할머니", koreanRomanized: "halmeoni", level: VocabLevel.BEGINNER },
-      { english: "grandfather", korean: "할아버지", koreanRomanized: "harabeoji", level: VocabLevel.BEGINNER },
-      { english: "love", korean: "사랑", koreanRomanized: "sarang", level: VocabLevel.BEGINNER },
-    ],
-  },
-  {
-    key: "travel",
-    name: "Perjalanan",
-    words: [
-      { english: "airport", korean: "공항", koreanRomanized: "gonghang", level: VocabLevel.INTERMEDIATE },
-      { english: "train", korean: "기차", koreanRomanized: "gicha", level: VocabLevel.INTERMEDIATE },
-      { english: "map", korean: "지도", koreanRomanized: "jido", level: VocabLevel.INTERMEDIATE },
-      { english: "ticket", korean: "표", koreanRomanized: "pyo", level: VocabLevel.INTERMEDIATE },
-      { english: "hotel", korean: "호텔", koreanRomanized: "hotel", level: VocabLevel.INTERMEDIATE },
-      { english: "left", korean: "왼쪽", koreanRomanized: "oenjjok", level: VocabLevel.ADVANCED },
-      { english: "right", korean: "오른쪽", koreanRomanized: "oreunjjok", level: VocabLevel.ADVANCED },
-      { english: "straight ahead", korean: "직진", koreanRomanized: "jikjin", level: VocabLevel.ADVANCED },
-    ],
-  },
-];
 
 async function seedVocab() {
   const vocabSeed = buildVocabSeed(20_000);
@@ -2200,6 +2104,58 @@ async function seedVocab() {
         skipDuplicates: true,
       });
     }
+  }
+}
+
+// Dunia berbasis kosakata (bukan Quest) - "misi harian"-nya adalah kosakata
+// hari ini dari bank VocabWord/VocabCategory (lihat seedVocab() di atas),
+// bukan soal Quest. Lihat WorldKind di schema.prisma dan
+// WorldsService.findAllForStudent yang mem-bypass syarat quest/chapter untuk
+// world berkind VOCAB.
+async function seedVocabWorlds() {
+  const subject = await prisma.subject.upsert({
+    where: { code: "BAHASA" },
+    update: {},
+    create: {
+      code: "BAHASA",
+      name: "Bahasa Asing",
+      description: "Kosakata Inggris-Korea harian lewat notifikasi dan widget.",
+    },
+  });
+
+  const worldInputs = [
+    {
+      key: "korea",
+      name: "Dunia Korea",
+      characterClass: "Duta Bahasa Korea",
+      themeDescription:
+        "Kumpulkan kosakata Korea harian lewat notifikasi dan widget home-screen.",
+      orderNumber: 3,
+    },
+    {
+      key: "inggris",
+      name: "Dunia Inggris",
+      characterClass: "Duta Bahasa Inggris",
+      themeDescription:
+        "Kumpulkan kosakata Inggris harian lewat notifikasi dan widget home-screen.",
+      orderNumber: 4,
+    },
+  ];
+
+  for (const input of worldInputs) {
+    await prisma.world.upsert({
+      where: { key: input.key },
+      update: { kind: WorldKind.VOCAB },
+      create: {
+        subjectId: subject.id,
+        key: input.key,
+        kind: WorldKind.VOCAB,
+        name: input.name,
+        characterClass: input.characterClass,
+        themeDescription: input.themeDescription,
+        orderNumber: input.orderNumber,
+      },
+    });
   }
 }
 
