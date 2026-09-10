@@ -1,5 +1,7 @@
 import { PrismaClient } from "@prisma/client";
-import { buildVocabSeed } from "../prisma/vocab-seed-data";
+
+const { buildVocabSeed } =
+  require("../prisma/vocab-seed-data.ts") as typeof import("../prisma/vocab-seed-data");
 
 const prisma = new PrismaClient();
 const CHUNK_SIZE = 500;
