@@ -13,11 +13,11 @@ import {
 } from "class-validator";
 
 export class UpdateVocabSettingDto {
-  @ApiPropertyOptional({ example: 5, description: "Jumlah kosakata baru per hari (1-20)" })
+  @ApiPropertyOptional({ example: 12, description: "Jumlah kosakata baru per hari (1-24)" })
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(20)
+  @Max(24)
   dailyCount?: number;
 
   @ApiPropertyOptional({ enum: VocabDisplayLanguage, example: VocabDisplayLanguage.BOTH })

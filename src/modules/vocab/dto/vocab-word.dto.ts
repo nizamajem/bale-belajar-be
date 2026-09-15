@@ -19,6 +19,12 @@ export class CreateVocabWordDto {
   @MaxLength(200)
   english!: string;
 
+  @ApiPropertyOptional({ example: "halo" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  indonesian?: string;
+
   @ApiProperty({ example: "안녕하세요" })
   @IsString()
   @MaxLength(200)
@@ -59,6 +65,12 @@ export class UpdateVocabWordDto {
   @IsString()
   @MaxLength(200)
   english?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  indonesian?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

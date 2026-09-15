@@ -1650,6 +1650,7 @@ model VocabWord {
   id                String     @id @default(uuid()) @db.Uuid
   categoryId        String     @db.Uuid
   english           String
+  indonesian        String?
   korean            String
   koreanRomanized   String?
   exampleSentenceEn String?
@@ -1673,7 +1674,7 @@ model VocabWord {
 model StudentVocabSetting {
   id                    String               @id @default(uuid()) @db.Uuid
   studentProfileId      String               @unique @db.Uuid
-  dailyCount            Int                  @default(5)
+  dailyCount            Int                  @default(12)
   displayLanguage       VocabDisplayLanguage @default(BOTH)
   notificationEnabled   Boolean              @default(true)
   widgetEnabled         Boolean              @default(true)

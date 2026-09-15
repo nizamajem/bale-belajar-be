@@ -15,10 +15,6 @@ import {
 } from "./dto/vocab-word.dto";
 import { UpdateVocabSettingDto } from "./dto/update-vocab-setting.dto";
 
-// Berapa hari ke belakang kata yang sudah tampil dihindari supaya tidak
-// langsung berulang, sebelum akhirnya boleh muncul lagi kalau bank kata habis.
-const NO_REPEAT_WINDOW_DAYS = 13;
-
 @Injectable()
 export class VocabService {
   constructor(private readonly prisma: PrismaService) {}
@@ -133,24 +129,20 @@ export class VocabService {
         : {}),
     };
 
-    const recentWindowStart = new Date(this.todayDateOnly());
-    recentWindowStart.setUTCDate(
-      recentWindowStart.getUTCDate() - NO_REPEAT_WINDOW_DAYS,
-    );
-    const recentDeliveries = await this.prisma.studentVocabDelivery.findMany({
-      where: { studentProfileId, deliveryDate: { gte: recentWindowStart } },
+    const previousDeliveries = await this.prisma.studentVocabDelivery.findMany({
+      where: { studentProfileId },
       select: { vocabWordId: true },
     });
-    const recentIds = recentDeliveries.map((delivery) => delivery.vocabWordId);
+    const previousIds = previousDeliveries.map((delivery) => delivery.vocabWordId);
 
     let candidates = await this.prisma.vocabWord.findMany({
-      where: { ...baseWhere, id: { notIn: recentIds } },
+      where: { ...baseWhere, id: { notIn: previousIds } },
       include: { category: true },
     });
 
     if (candidates.length < needed) {
-      // Bank kata untuk filter ini belum cukup besar - izinkan pengulangan
-      // daripada gagal menampilkan kosakata sama sekali.
+      // Baru izinkan pengulangan kalau bank kata sesuai filter benar-benar
+      // sudah habis untuk siswa ini.
       candidates = await this.prisma.vocabWord.findMany({
         where: baseWhere,
         include: { category: true },
@@ -224,6 +216,7 @@ export class VocabService {
       data: {
         categoryId: dto.categoryId,
         english: dto.english.trim(),
+        indonesian: dto.indonesian?.trim(),
         korean: dto.korean.trim(),
         koreanRomanized: dto.koreanRomanized?.trim(),
         exampleSentenceEn: dto.exampleSentenceEn?.trim(),
@@ -242,6 +235,7 @@ export class VocabService {
         ? {
             OR: [
               { english: { contains: query.search, mode: "insensitive" } },
+              { indonesian: { contains: query.search, mode: "insensitive" } },
               { korean: { contains: query.search, mode: "insensitive" } },
             ],
           }
@@ -264,6 +258,7 @@ export class VocabService {
       data: {
         categoryId: dto.categoryId,
         english: dto.english?.trim(),
+        indonesian: dto.indonesian?.trim(),
         korean: dto.korean?.trim(),
         koreanRomanized: dto.koreanRomanized?.trim(),
         exampleSentenceEn: dto.exampleSentenceEn?.trim(),
@@ -327,6 +322,7 @@ export class VocabService {
     return {
       id: word.id,
       english: word.english,
+      indonesian: word.indonesian,
       korean: word.korean,
       koreanRomanized: word.koreanRomanized,
       exampleSentenceEn: word.exampleSentenceEn,

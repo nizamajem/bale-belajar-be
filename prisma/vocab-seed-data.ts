@@ -2,6 +2,7 @@ import { VocabLevel } from "@prisma/client";
 
 export type VocabWordSeed = {
   english: string;
+  indonesian?: string;
   korean: string;
   koreanRomanized: string;
   level: VocabLevel;
@@ -211,6 +212,171 @@ const CATEGORY_NAMES: Record<string, string> = {
   "advanced-collocations": "Kolokasi Mahir",
 };
 
+const INDONESIAN_TERMS: Record<string, string> = {
+  hello: "halo",
+  goodbye: "selamat tinggal",
+  "thank you": "terima kasih",
+  sorry: "maaf",
+  yes: "ya",
+  no: "tidak",
+  please: "tolong",
+  "nice to meet you": "senang bertemu denganmu",
+  morning: "pagi",
+  afternoon: "siang",
+  evening: "malam",
+  today: "hari ini",
+  tomorrow: "besok",
+  yesterday: "kemarin",
+  water: "air",
+  house: "rumah",
+  room: "ruangan",
+  door: "pintu",
+  window: "jendela",
+  chair: "kursi",
+  table: "meja",
+  bag: "tas",
+  phone: "telepon",
+  friend: "teman",
+  weather: "cuaca",
+  promise: "janji",
+  memory: "ingatan",
+  habit: "kebiasaan",
+  rice: "nasi",
+  food: "makanan",
+  restaurant: "restoran",
+  coffee: "kopi",
+  tea: "teh",
+  fruit: "buah",
+  vegetable: "sayuran",
+  bread: "roti",
+  meat: "daging",
+  fish: "ikan",
+  breakfast: "sarapan",
+  lunch: "makan siang",
+  dinner: "makan malam",
+  recipe: "resep",
+  school: "sekolah",
+  teacher: "guru",
+  student: "siswa",
+  book: "buku",
+  homework: "pekerjaan rumah",
+  test: "ujian",
+  classroom: "ruang kelas",
+  question: "pertanyaan",
+  answer: "jawaban",
+  lesson: "pelajaran",
+  grade: "nilai",
+  assignment: "tugas",
+  research: "penelitian",
+  analysis: "analisis",
+  evidence: "bukti",
+  family: "keluarga",
+  mother: "ibu",
+  father: "ayah",
+  "older brother": "kakak laki-laki",
+  "older sister": "kakak perempuan",
+  "younger sibling": "adik",
+  child: "anak",
+  grandmother: "nenek",
+  grandfather: "kakek",
+  colleague: "rekan kerja",
+  meeting: "rapat",
+  company: "perusahaan",
+  customer: "pelanggan",
+  project: "proyek",
+  deadline: "tenggat waktu",
+  strategy: "strategi",
+  negotiation: "negosiasi",
+  presentation: "presentasi",
+  budget: "anggaran",
+  airport: "bandara",
+  train: "kereta",
+  bus: "bus",
+  taxi: "taksi",
+  map: "peta",
+  ticket: "tiket",
+  hotel: "hotel",
+  passport: "paspor",
+  reservation: "reservasi",
+  luggage: "barang bawaan",
+  left: "kiri",
+  right: "kanan",
+  "straight ahead": "lurus ke depan",
+  hospital: "rumah sakit",
+  medicine: "obat",
+  doctor: "dokter",
+  nurse: "perawat",
+  pain: "nyeri",
+  fever: "demam",
+  exercise: "olahraga",
+  sleep: "tidur",
+  stress: "stres",
+  recovery: "pemulihan",
+  computer: "komputer",
+  internet: "internet",
+  password: "kata sandi",
+  screen: "layar",
+  keyboard: "papan ketik",
+  message: "pesan",
+  file: "berkas",
+  data: "data",
+  security: "keamanan",
+  algorithm: "algoritma",
+  culture: "budaya",
+  history: "sejarah",
+  society: "masyarakat",
+  economy: "ekonomi",
+  law: "hukum",
+  policy: "kebijakan",
+  environment: "lingkungan",
+  community: "komunitas",
+  responsibility: "tanggung jawab",
+  opportunity: "kesempatan",
+  problem: "masalah",
+  solution: "solusi",
+  reason: "alasan",
+  result: "hasil",
+  cause: "penyebab",
+  effect: "dampak",
+  hypothesis: "hipotesis",
+  conclusion: "kesimpulan",
+  method: "metode",
+  concept: "konsep",
+  study: "belajar",
+  read: "membaca",
+  write: "menulis",
+  listen: "mendengarkan",
+  speak: "berbicara",
+  ask: "bertanya",
+  explain: "menjelaskan",
+  compare: "membandingkan",
+  analyze: "menganalisis",
+  evaluate: "mengevaluasi",
+  summarize: "merangkum",
+  decide: "memutuskan",
+  prepare: "menyiapkan",
+  practice: "berlatih",
+  remember: "mengingat",
+  forget: "melupakan",
+  travel: "bepergian",
+  reserve: "memesan",
+  recover: "pulih",
+  good: "baik",
+  bad: "buruk",
+  big: "besar",
+  small: "kecil",
+  fast: "cepat",
+  slow: "lambat",
+  easy: "mudah",
+  difficult: "sulit",
+  important: "penting",
+  necessary: "perlu",
+  accurate: "akurat",
+  logical: "logis",
+  efficient: "efisien",
+  responsible: "bertanggung jawab",
+};
+
 const VOWELS = new Set(["a", "e", "i", "o", "u"]);
 
 export function buildVocabSeed(targetWordCount = 20_000): VocabCategorySeed[] {
@@ -232,6 +398,7 @@ export function buildVocabSeed(targetWordCount = 20_000): VocabCategorySeed[] {
     words.push({
       ...entry,
       english: normalizedEnglish,
+      indonesian: entry.indonesian ?? toIndonesian(normalizedEnglish),
       exampleSentenceEn: entry.exampleSentenceEn ?? example?.en,
       exampleSentenceKo: entry.exampleSentenceKo ?? example?.ko,
     });
@@ -399,6 +566,50 @@ function toSeedArray(buckets: Map<string, VocabWordSeed[]>): VocabCategorySeed[]
 
 function totalWords(buckets: Map<string, VocabWordSeed[]>) {
   return Array.from(buckets.values()).reduce((total, words) => total + words.length, 0);
+}
+
+function toIndonesian(english: string) {
+  const value = english.toLowerCase();
+  if (INDONESIAN_TERMS[value]) return INDONESIAN_TERMS[value];
+  if (value.startsWith("to ")) {
+    return INDONESIAN_TERMS[value.slice(3)] ?? value.slice(3);
+  }
+
+  const patterns: Array<[RegExp, (...parts: string[]) => string]> = [
+    [/^i like (?:a |an )?(.+)$/, (term) => `saya suka ${translateTerm(term)}`],
+    [/^this is (?:a |an )?(.+)$/, (term) => `ini adalah ${translateTerm(term)}`],
+    [/^i need (?:a |an )?(.+)$/, (term) => `saya butuh ${translateTerm(term)}`],
+    [/^please explain (?:a |an )?(.+)$/, (term) => `tolong jelaskan ${translateTerm(term)}`],
+    [/^i can talk about (.+)$/, (term) => `saya bisa berbicara tentang ${translateTerm(term)}`],
+    [/^this topic is related to (.+)$/, (term) => `topik ini berkaitan dengan ${translateTerm(term)}`],
+    [/^i want to (.+)$/, (term) => `saya ingin ${translateTerm(term)}`],
+    [/^i have to (.+)$/, (term) => `saya harus ${translateTerm(term)}`],
+    [/^i am learning to (.+)$/, (term) => `saya sedang belajar ${translateTerm(term)}`],
+    [/^(.+) and (.+)$/, (left, right) => `${translateTerm(left)} dan ${translateTerm(right)}`],
+    [
+      /^the relationship between (.+) and (.+)$/,
+      (left, right) => `hubungan antara ${translateTerm(left)} dan ${translateTerm(right)}`,
+    ],
+    [
+      /^compare (.+) with (.+)$/,
+      (left, right) => `bandingkan ${translateTerm(left)} dengan ${translateTerm(right)}`,
+    ],
+    [
+      /^the difference between (.+) and (.+)$/,
+      (left, right) => `perbedaan antara ${translateTerm(left)} dan ${translateTerm(right)}`,
+    ],
+  ];
+
+  for (const [regex, render] of patterns) {
+    const match = value.match(regex);
+    if (match) return render(...match.slice(1));
+  }
+
+  return english;
+}
+
+function translateTerm(term: string) {
+  return INDONESIAN_TERMS[term.toLowerCase()] ?? term;
 }
 
 function article(word: string) {

@@ -2094,6 +2094,7 @@ async function seedVocab() {
         data: chunk.map((word) => ({
           categoryId: category.id,
           english: word.english,
+          indonesian: word.indonesian,
           korean: word.korean,
           koreanRomanized: word.koreanRomanized,
           exampleSentenceEn: word.exampleSentenceEn,
@@ -2103,6 +2104,14 @@ async function seedVocab() {
         })),
         skipDuplicates: true,
       });
+      await prisma.$transaction(
+        chunk.map((word) =>
+          prisma.vocabWord.updateMany({
+            where: { categoryId: category.id, english: word.english },
+            data: { indonesian: word.indonesian },
+          }),
+        ),
+      );
     }
   }
 }
