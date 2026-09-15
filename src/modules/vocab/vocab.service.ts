@@ -81,6 +81,9 @@ export class VocabService {
       include: { vocabWord: { include: { category: true } } },
       orderBy: { createdAt: "asc" },
     });
+    deliveries = deliveries.filter((delivery) =>
+      this.isSingleVocabWord(delivery.vocabWord),
+    );
 
     const needed = setting.dailyCount - deliveries.length;
     if (needed > 0) {
@@ -139,6 +142,7 @@ export class VocabService {
       where: { ...baseWhere, id: { notIn: previousIds } },
       include: { category: true },
     });
+    candidates = candidates.filter((word) => this.isSingleVocabWord(word));
 
     if (candidates.length < needed) {
       // Baru izinkan pengulangan kalau bank kata sesuai filter benar-benar
@@ -147,9 +151,16 @@ export class VocabService {
         where: baseWhere,
         include: { category: true },
       });
+      candidates = candidates.filter((word) => this.isSingleVocabWord(word));
     }
 
     return this.pickRandom(candidates, needed);
+  }
+
+  private isSingleVocabWord(word: Pick<VocabWord, "english" | "korean">) {
+    const english = word.english.trim();
+    const korean = word.korean.trim();
+    return /^[A-Za-z][A-Za-z'-]*$/.test(english) && !/\s/.test(korean);
   }
 
   private pickRandom<T>(pool: T[], count: number): T[] {
