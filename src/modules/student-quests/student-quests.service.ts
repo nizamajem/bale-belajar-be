@@ -71,6 +71,17 @@ export class StudentQuestsService {
 
     const assignedDate = startOfDay(new Date());
 
+    if (competencyId) {
+      const curriculumAssignment = await this.getOrCreateCurriculumAssignment(
+        studentProfileId,
+        world.id,
+        assignedDate,
+        competencyId,
+      );
+      this.ensureAssignmentReady(curriculumAssignment);
+      return this.serializeAssignment(curriculumAssignment);
+    }
+
     let assignment = await this.prisma.questAssignment.findUnique({
       where: {
         studentProfileId_worldId_assignedDate_sequenceNumber: {
@@ -167,14 +178,7 @@ export class StudentQuestsService {
       });
     }
 
-    if (assignment.quest.questions.length === 0) {
-      throw new NotFoundException("Misi ini belum punya pertanyaan aktif.");
-    }
-    if (assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS) {
-      throw new NotFoundException(
-        `Misi hari ini baru punya ${assignment.quest.questions.length} pertanyaan aktif. Minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan.`,
-      );
-    }
+    this.ensureAssignmentReady(assignment);
 
     return this.serializeAssignment(assignment);
   }
@@ -391,6 +395,62 @@ export class StudentQuestsService {
     });
     if (existing) return existing;
     return this.prisma.studentQuestSetting.create({ data: { studentProfileId } });
+  }
+
+  private async getOrCreateCurriculumAssignment(
+    studentProfileId: string,
+    worldId: string,
+    assignedDate: Date,
+    competencyId: string,
+  ) {
+    const existingAssignments = await this.prisma.questAssignment.findMany({
+      where: {
+        studentProfileId,
+        worldId,
+        assignedDate,
+        quest: {
+          questions: {
+            some: { status: "ACTIVE", competencyId },
+          },
+        },
+      },
+      orderBy: { sequenceNumber: "desc" },
+      include: assignmentInclude,
+    });
+
+    const openAssignment = existingAssignments.find(
+      (assignment) => assignment.attempt?.status !== AttemptStatus.SUBMITTED,
+    );
+    if (openAssignment) return openAssignment;
+
+    const quest = await this.pickQuestForToday(worldId, undefined, competencyId);
+    const lastAssignment = await this.prisma.questAssignment.findFirst({
+      where: { studentProfileId, worldId, assignedDate },
+      orderBy: { sequenceNumber: "desc" },
+      select: { sequenceNumber: true },
+    });
+
+    return this.prisma.questAssignment.create({
+      data: {
+        studentProfileId,
+        worldId,
+        questId: quest.id,
+        assignedDate,
+        sequenceNumber: (lastAssignment?.sequenceNumber ?? 0) + 1,
+      },
+      include: assignmentInclude,
+    });
+  }
+
+  private ensureAssignmentReady(assignment: AssignmentWithQuest) {
+    if (assignment.quest.questions.length === 0) {
+      throw new NotFoundException("Misi ini belum punya pertanyaan aktif.");
+    }
+    if (assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS) {
+      throw new NotFoundException(
+        `Misi hari ini baru punya ${assignment.quest.questions.length} pertanyaan aktif. Minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan.`,
+      );
+    }
   }
 
   async startAttempt(currentUser: AuthenticatedUser, assignmentId: string) {
