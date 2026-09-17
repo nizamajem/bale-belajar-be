@@ -59,7 +59,7 @@ export class StudentQuestsService {
     private readonly masteryService: MasteryService,
   ) {}
 
-  async getTodayQuest(currentUser: AuthenticatedUser, worldKey: string) {
+  async getTodayQuest(currentUser: AuthenticatedUser, worldKey: string, competencyId?: string) {
     const studentProfileId = this.getStudentProfileId(currentUser);
     const world = await this.resolvePlayableWorld(worldKey);
 
@@ -87,7 +87,7 @@ export class StudentQuestsService {
       assignment &&
       assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS
     ) {
-      const replacementQuest = await this.pickQuestForToday(world.id, [assignment.questId])
+      const replacementQuest = await this.pickQuestForToday(world.id, [assignment.questId], competencyId)
         .catch(() => this.pickQuestFromAnyReadyWorld(assignment!.questId));
       if (replacementQuest.id !== assignment.questId) {
         await this.prisma.$transaction(async (tx) => {
@@ -118,8 +118,43 @@ export class StudentQuestsService {
       }
     }
 
+    if (
+      assignment &&
+      competencyId &&
+      assignment.attempt?.status !== AttemptStatus.SUBMITTED &&
+      !assignment.quest.questions.some((question) => question.competencyId === competencyId)
+    ) {
+      const targetedQuest = await this.pickQuestForToday(world.id, [assignment.questId], competencyId).catch(() => null);
+      if (targetedQuest && targetedQuest.id !== assignment.questId) {
+        await this.prisma.$transaction(async (tx) => {
+          if (assignment?.attempt) {
+            await tx.questAnswer.deleteMany({ where: { questAttemptId: assignment.attempt.id } });
+            await tx.questAttempt.delete({ where: { id: assignment.attempt.id } });
+          }
+          await tx.questAssignment.update({
+            where: { id: assignment!.id },
+            data: {
+              questId: targetedQuest.id,
+              status: AssignmentStatus.ASSIGNED,
+            },
+          });
+        });
+        assignment = await this.prisma.questAssignment.findUnique({
+          where: {
+            studentProfileId_worldId_assignedDate_sequenceNumber: {
+              studentProfileId,
+              worldId: world.id,
+              assignedDate,
+              sequenceNumber: 1,
+            },
+          },
+          include: assignmentInclude,
+        });
+      }
+    }
+
     if (!assignment) {
-      const quest = await this.pickQuestForToday(world.id);
+      const quest = await this.pickQuestForToday(world.id, undefined, competencyId);
 
       assignment = await this.prisma.questAssignment.create({
         data: {
@@ -196,7 +231,7 @@ export class StudentQuestsService {
    * StudentQuestSetting.dailyQuestCount DAN misi paling akhir sudah
    * SUBMITTED (tidak boleh minta misi baru sambil masih ada yang mengambang).
    */
-  async requestNextQuest(currentUser: AuthenticatedUser, worldKey: string) {
+  async requestNextQuest(currentUser: AuthenticatedUser, worldKey: string, competencyId?: string) {
     const studentProfileId = this.getStudentProfileId(currentUser);
     const world = await this.resolvePlayableWorld(worldKey);
     if (!world) {
@@ -231,7 +266,7 @@ export class StudentQuestsService {
     }
 
     const usedQuestIds = todayAssignments.map((assignment) => assignment.questId);
-    const quest = await this.pickQuestForToday(world.id, usedQuestIds).catch(() =>
+    const quest = await this.pickQuestForToday(world.id, usedQuestIds, competencyId).catch(() =>
       this.pickQuestForToday(world.id),
     );
 
@@ -442,13 +477,13 @@ export class StudentQuestsService {
     };
   }
 
-  private async pickQuestForToday(worldId: string, excludeQuestIds?: string[]) {
+  private async pickQuestForToday(worldId: string, excludeQuestIds?: string[], competencyId?: string) {
     const activeQuests = await this.prisma.quest.findMany({
       where: {
         worldId,
         status: "ACTIVE",
         ...(excludeQuestIds?.length ? { id: { notIn: excludeQuestIds } } : {}),
-        questions: { some: { status: "ACTIVE" } },
+        questions: { some: { status: "ACTIVE", ...(competencyId ? { competencyId } : {}) } },
       },
       orderBy: { createdAt: "asc" },
       include: {
@@ -775,8 +810,10 @@ export class StudentQuestsService {
     item: QuestQuestionWithChildren["orderItems"][number],
     options: QuestQuestionWithChildren["options"],
   ) {
-    const direct = item.label?.trim() || item.description?.trim();
-    if (direct) return direct;
+    const label = item.label?.trim();
+    const description = item.description?.trim();
+    if (description && !this.looksInternalCode(description)) return description;
+    if (label && !this.looksInternalCode(label)) return label;
 
     const optionId = item.itemId.includes("_")
       ? item.itemId.split("_").at(-1)
@@ -784,7 +821,14 @@ export class StudentQuestsService {
     const linkedOption = options.find(
       (option) => option.optionId === optionId || option.optionId === item.itemId,
     );
-    return linkedOption?.label?.trim() || item.itemId;
+    const optionLabel = linkedOption?.label?.trim();
+    if (optionLabel && !this.looksInternalCode(optionLabel)) return optionLabel;
+
+    return optionId && !this.looksInternalCode(optionId) ? optionId : `Item ${optionId || item.displayOrder}`;
+  }
+
+  private looksInternalCode(value: string) {
+    return /^[A-Z]{2,}_[A-Z0-9_]+$/.test(value.trim());
   }
 
   private async getAssignmentForStudent(currentUser: AuthenticatedUser, assignmentId: string) {

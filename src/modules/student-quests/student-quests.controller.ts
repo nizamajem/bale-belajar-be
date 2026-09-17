@@ -26,7 +26,7 @@ export class StudentQuestsController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Query() query: GetTodayQuestQueryDto,
   ) {
-    return this.studentQuestsService.getTodayQuest(currentUser, query.worldKey);
+    return this.studentQuestsService.getTodayQuest(currentUser, query.worldKey, query.competencyId);
   }
 
   @Get("quests/setting")
@@ -59,7 +59,7 @@ export class StudentQuestsController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Query() query: GetTodayQuestQueryDto,
   ) {
-    return this.studentQuestsService.requestNextQuest(currentUser, query.worldKey);
+    return this.studentQuestsService.requestNextQuest(currentUser, query.worldKey, query.competencyId);
   }
 
   @Post("quests/:assignmentId/start")
