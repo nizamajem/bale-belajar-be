@@ -226,6 +226,107 @@ export class StudentQuestsService {
     };
   }
 
+  async getHistory(currentUser: AuthenticatedUser, worldKey?: string) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    const key = worldKey?.trim().toLowerCase();
+
+    const assignments = await this.prisma.questAssignment.findMany({
+      where: {
+        studentProfileId,
+        ...(key ? { world: { key } } : {}),
+        attempt: { isNot: null },
+      },
+      orderBy: [{ assignedDate: "desc" }, { sequenceNumber: "desc" }],
+      take: 20,
+      include: {
+        world: { select: { key: true, name: true } },
+        quest: { select: { title: true } },
+        attempt: {
+          include: {
+            answers: {
+              include: {
+                question: {
+                  select: {
+                    questionText: true,
+                    questionType: true,
+                    competency: { select: { name: true } },
+                  },
+                },
+              },
+              orderBy: { updatedAt: "desc" },
+            },
+          },
+        },
+      },
+    });
+
+    const submittedAssignments = assignments.filter(
+      (assignment) => assignment.attempt?.status === AttemptStatus.SUBMITTED,
+    );
+    const answers = submittedAssignments.flatMap((assignment) => assignment.attempt?.answers ?? []);
+    const autoScoredAnswers = answers.filter((answer) => answer.isCorrect !== null);
+    const correctAnswers = autoScoredAnswers.filter((answer) => answer.isCorrect === true).length;
+    const reviewQuestions = answers.filter((answer) => answer.isCorrect === null).length;
+    const averageScore = submittedAssignments.length
+      ? Math.round(
+          submittedAssignments.reduce(
+            (sum, assignment) => sum + Number(assignment.attempt?.overallScore ?? 0),
+            0,
+          ) / submittedAssignments.length,
+        )
+      : 0;
+
+    const weakSpotCounts = new Map<string, { label: string; detail: string; count: number }>();
+    for (const answer of answers) {
+      if (answer.isCorrect !== false) continue;
+      const label = answer.question.competency?.name ?? this.questionTypeLabel(answer.question.questionType);
+      const existing = weakSpotCounts.get(label) ?? {
+        label,
+        detail: this.questionTypeLabel(answer.question.questionType),
+        count: 0,
+      };
+      existing.count += 1;
+      weakSpotCounts.set(label, existing);
+    }
+
+    const weakSpots = [...weakSpotCounts.values()]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    return {
+      summary: {
+        totalAttempts: assignments.length,
+        completedAttempts: submittedAssignments.length,
+        totalQuestions: autoScoredAnswers.length,
+        correctAnswers,
+        reviewQuestions,
+        accuracy: autoScoredAnswers.length
+          ? Math.round((correctAnswers / autoScoredAnswers.length) * 100)
+          : 0,
+        averageScore,
+      },
+      weakSpots,
+      recentAttempts: submittedAssignments.slice(0, 8).map((assignment) => {
+        const attempt = assignment.attempt!;
+        const attemptAnswers = attempt.answers;
+        const scored = attemptAnswers.filter((answer) => answer.isCorrect !== null);
+        const correct = scored.filter((answer) => answer.isCorrect === true).length;
+        const review = attemptAnswers.filter((answer) => answer.isCorrect === null).length;
+        return {
+          id: attempt.id,
+          title: assignment.quest.title,
+          worldKey: assignment.world.key,
+          worldName: assignment.world.name,
+          submittedAt: attempt.submittedAt,
+          score: Number(attempt.overallScore ?? 0),
+          totalQuestions: scored.length,
+          correctAnswers: correct,
+          reviewQuestions: review,
+        };
+      }),
+    };
+  }
+
   /**
    * Misi tambahan hari ini (sequence 2+) - hanya kalau belum menyentuh batas
    * StudentQuestSetting.dailyQuestCount DAN misi paling akhir sudah
@@ -829,6 +930,13 @@ export class StudentQuestsService {
 
   private looksInternalCode(value: string) {
     return /^[A-Z]{2,}_[A-Z0-9_]+$/.test(value.trim());
+  }
+
+  private questionTypeLabel(type: string) {
+    return type
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
   }
 
   private async getAssignmentForStudent(currentUser: AuthenticatedUser, assignmentId: string) {

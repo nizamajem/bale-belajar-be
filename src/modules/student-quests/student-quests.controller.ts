@@ -53,6 +53,15 @@ export class StudentQuestsController {
     return this.studentQuestsService.getTodayAll(currentUser, query.worldKey);
   }
 
+  @Get("quests/history")
+  @ResponseMessage("Riwayat quest berhasil diambil.")
+  getHistory(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query("worldKey") worldKey?: string,
+  ) {
+    return this.studentQuestsService.getHistory(currentUser, worldKey);
+  }
+
   @Post("quests/next")
   @ResponseMessage("Misi tambahan berhasil diambil.")
   requestNextQuest(
