@@ -48,6 +48,8 @@ enum VocabLevel {
 enum VocabDisplayLanguage {
   EN_TO_KO
   KO_TO_EN
+  KO_TO_ID
+  EN_TO_ID
   BOTH
 }
 
