@@ -665,28 +665,42 @@ export class StudentQuestsService {
       where: {
         worldId,
         status: "ACTIVE",
-        ...(excludeQuestIds?.length ? { id: { notIn: excludeQuestIds } } : {}),
         questions: { some: { status: "ACTIVE", ...(competencyId ? { competencyId } : {}) } },
       },
-      orderBy: [{ chapter: { chapterNumber: { sort: "asc", nulls: "last" } } }, { createdAt: "asc" }],
+      orderBy: { createdAt: "asc" },
       include: {
+        chapter: { select: { chapterNumber: true } },
         _count: { select: { questions: { where: { status: "ACTIVE" } } } },
       },
     });
 
-    const readyQuests = activeQuests.filter(
-      (quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS,
-    );
+    const chapterOrder = (quest: (typeof activeQuests)[number]) =>
+      quest.chapter?.chapterNumber ?? Number.MAX_SAFE_INTEGER;
+    // Urut per chapter (quest tanpa chapter di akhir); sort() stabil, jadi
+    // urutan createdAt di dalam satu chapter tetap terjaga.
+    const allReadyQuests = activeQuests
+      .filter((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS)
+      .sort((a, b) => chapterOrder(a) - chapterOrder(b));
+    const excluded = new Set(excludeQuestIds ?? []);
+    const readyQuests = allReadyQuests.filter((quest) => !excluded.has(quest.id));
+
+    if (studentProfileId && allReadyQuests.length > 0) {
+      const passedQuestIds = await this.getPassedQuestIds(studentProfileId, worldId);
+      const unpassed = allReadyQuests.filter((quest) => !passedQuestIds.has(quest.id));
+      if (unpassed.length > 0) {
+        // Siswa hanya bergerak di chapter terendah yang belum tuntas. Kalau
+        // semua quest di chapter itu sudah dicoba hari ini (excluded), quest
+        // yang belum lulus diulang - bukan loncat ke chapter berikutnya.
+        const currentChapter = chapterOrder(unpassed[0]);
+        const inChapter = unpassed.filter((quest) => chapterOrder(quest) === currentChapter);
+        return inChapter.find((quest) => !excluded.has(quest.id)) ?? inChapter[0];
+      }
+    }
+
     if (readyQuests.length === 0) {
       throw new NotFoundException(
         `Belum ada quest aktif dengan minimal ${MIN_ACTIVE_QUEST_QUESTIONS} pertanyaan untuk dunia ini.`,
       );
-    }
-
-    if (studentProfileId) {
-      const passedQuestIds = await this.getPassedQuestIds(studentProfileId, worldId);
-      const nextQuest = readyQuests.find((quest) => !passedQuestIds.has(quest.id));
-      if (nextQuest) return nextQuest;
     }
 
     const dayIndex = Math.floor(Date.now() / 86_400_000);
