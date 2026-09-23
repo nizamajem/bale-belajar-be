@@ -562,6 +562,41 @@ async function seedBaleVerse(mtkSubjectId: string) {
   }
 }
 
+// orderNumber CurriculumModule unik per world. Di database yang sudah pernah
+// menjalankan normalize-curriculum, posisi ini bisa sudah terisi modul
+// otomatis ("auto-*"). Dipanggil sebelum upsert: kalau modul dengan slug ini
+// sudah ada, tidak ada yang diubah (upsert akan lewat jalur update).
+async function resolveModuleOrderNumber(worldId: string, slug: string, desiredOrder: number) {
+  const existing = await prisma.curriculumModule.findUnique({
+    where: { worldId_slug: { worldId, slug } },
+    select: { id: true },
+  });
+  if (existing) return desiredOrder;
+
+  const occupant = await prisma.curriculumModule.findUnique({
+    where: { worldId_orderNumber: { worldId, orderNumber: desiredOrder } },
+    select: { id: true, slug: true },
+  });
+  if (!occupant) return desiredOrder;
+
+  const last = await prisma.curriculumModule.findFirst({
+    where: { worldId },
+    orderBy: { orderNumber: "desc" },
+    select: { orderNumber: true },
+  });
+  const nextFreeOrder = (last?.orderNumber ?? 0) + 1;
+
+  if (occupant.slug.startsWith("auto-")) {
+    // Modul otomatis digeser ke akhir supaya Bab kurikulum tetap berurutan.
+    await prisma.curriculumModule.update({
+      where: { id: occupant.id },
+      data: { orderNumber: nextFreeOrder },
+    });
+    return desiredOrder;
+  }
+  return nextFreeOrder;
+}
+
 async function seedBaleDetective() {
   const subject = await prisma.subject.upsert({
     where: { code: "DETEKTIF" },
@@ -632,7 +667,7 @@ async function seedBaleDetective() {
         "Kamu belajar membaca kasus dari dasar: menemukan fakta, memisahkan asumsi, mengecek sumber, lalu membuat kesimpulan yang adil.",
       bigIdea:
         "Detektif profesional tidak mulai dari menuduh. Mereka mulai dari pertanyaan: apa yang benar-benar kita tahu, dari mana kita tahu, dan bukti apa yang masih kurang?",
-      orderNumber: 1,
+      orderNumber: await resolveModuleOrderNumber(world.id, "observasi-bukti-dasar", 1),
       estimatedMinutes: 25,
       status: CurriculumModuleStatus.ACTIVE,
     },
@@ -1101,7 +1136,7 @@ async function seedBaleDetective() {
         title: moduleInput.title,
         simpleGoal: moduleInput.simpleGoal,
         bigIdea: moduleInput.bigIdea,
-        orderNumber: moduleIndex + 2,
+        orderNumber: await resolveModuleOrderNumber(world.id, moduleInput.slug, moduleIndex + 2),
         estimatedMinutes: moduleInput.estimatedMinutes,
         status: CurriculumModuleStatus.ACTIVE,
       },
@@ -1432,7 +1467,7 @@ async function seedBaleDetective() {
         title: moduleInput.title,
         simpleGoal: moduleInput.simpleGoal,
         bigIdea: moduleInput.bigIdea,
-        orderNumber: moduleIndex + 7,
+        orderNumber: await resolveModuleOrderNumber(world.id, moduleInput.slug, moduleIndex + 7),
         estimatedMinutes: moduleInput.estimatedMinutes,
         status: CurriculumModuleStatus.ACTIVE,
       },
