@@ -9,10 +9,12 @@ import {
   QuestionDifficulty,
   QuestionStatus,
   QuestionType,
+  QuestQuestionType,
   UserRole,
   WorldKind,
 } from "@prisma/client";
 import * as bcrypt from "bcrypt";
+import { detectiveQuestLevels, type DetectiveQuestion } from "./detective-quest-data";
 import { buildVocabSeed } from "./vocab-seed-data";
 
 const prisma = new PrismaClient();
@@ -2136,9 +2138,234 @@ async function seedBaleDetective() {
     }
   }
 
+  await seedDetectiveQuestPath(world.id, skills);
+
   if (process.env.SEED_DETECTIVE_ONLY !== "true") {
     await seedVocab();
     await seedVocabWorlds();
+  }
+}
+
+// Jalur Quest Detectivia bertingkat (Pemula -> Expert) yang benar-benar
+// dimainkan lewat QuestScreen di Flutter. Isi soal ada di
+// detective-quest-data.ts. Chapter dirantai setelah DET-CH-001 (dari
+// tools/seed-production-content.ts) kalau chapter itu sudah ada.
+const QUEST_TYPE_BY_KIND: Record<DetectiveQuestion["kind"], QuestQuestionType> = {
+  single: QuestQuestionType.SINGLE_CHOICE,
+  binary: QuestQuestionType.BINARY_CHOICE,
+  multi: QuestQuestionType.MULTIPLE_SELECT,
+  order: QuestQuestionType.ORDERING,
+  timeline: QuestQuestionType.TIMELINE_BUILDER,
+  match: QuestQuestionType.MATCHING,
+};
+
+const QUESTION_INSTRUCTION_BY_KIND: Record<DetectiveQuestion["kind"], string> = {
+  single: "Pilih satu jawaban yang paling tepat.",
+  binary: "Tentukan apakah pernyataan itu benar atau salah.",
+  multi: "Pilih SEMUA jawaban yang benar. Pilihan yang salah mengurangi skor.",
+  order: "Susun urutan yang benar dari atas ke bawah.",
+  timeline: "Susun kejadian sesuai urutan waktu, dari paling awal.",
+  match: "Pasangkan setiap pernyataan di kiri dengan pasangan yang tepat di kanan.",
+};
+
+const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+
+// Urutan acak tapi deterministik (sama setiap seed ulang) supaya posisi
+// jawaban benar tidak selalu di A, dan susunan awal ordering/matching tidak
+// pernah langsung benar.
+function seededOrder(length: number, seedText: string, avoidIdentity: boolean): number[] {
+  let state = 2166136261;
+  for (const char of seedText) {
+    state = Math.imul(state ^ char.charCodeAt(0), 16777619) >>> 0;
+  }
+  const order = Array.from({ length }, (_, index) => index);
+  for (let index = length - 1; index > 0; index--) {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    const swapIndex = state % (index + 1);
+    [order[index], order[swapIndex]] = [order[swapIndex], order[index]];
+  }
+  if (avoidIdentity && length > 1 && order.every((value, index) => value === index)) {
+    order.push(order.shift()!);
+  }
+  return order;
+}
+
+async function clearQuestQuestionChildren(questQuestionId: string) {
+  await prisma.questQuestionOption.deleteMany({ where: { questQuestionId } });
+  await prisma.questOrderItem.deleteMany({ where: { questQuestionId } });
+  await prisma.questMatchingPair.deleteMany({ where: { questQuestionId } });
+}
+
+async function createQuestQuestionChildren(
+  questQuestionId: string,
+  code: string,
+  question: DetectiveQuestion,
+) {
+  switch (question.kind) {
+    case "single":
+    case "multi": {
+      const correct = question.kind === "single" ? [question.correct] : question.correct;
+      const labels = [...correct, ...question.wrong];
+      const order = seededOrder(labels.length, code, false);
+      await prisma.questQuestionOption.createMany({
+        data: order.map((labelIndex, position) => {
+          const isCorrect = labelIndex < correct.length;
+          return {
+            questQuestionId,
+            optionId: OPTION_LETTERS[position],
+            label: labels[labelIndex],
+            isCorrect,
+            displayOrder: position + 1,
+            misconception: isCorrect ? null : "Belum tepat. Periksa lagi apa yang benar-benar didukung bukti.",
+          };
+        }),
+      });
+      return;
+    }
+    case "binary":
+      // BinaryChoiceTemplate memetakan tombol "Benar" ke options[0] dan
+      // "Salah" ke options[1] (lihat quest_question_view.dart).
+      await prisma.questQuestionOption.createMany({
+        data: [
+          { questQuestionId, optionId: "A", label: "Benar", isCorrect: question.answer, displayOrder: 1 },
+          { questQuestionId, optionId: "B", label: "Salah", isCorrect: !question.answer, displayOrder: 2 },
+        ],
+      });
+      return;
+    case "order":
+    case "timeline": {
+      const items =
+        question.kind === "order"
+          ? question.steps.map((label) => ({ label, timeLabel: null as string | null }))
+          : question.events.map(([timeLabel, label]) => ({ label, timeLabel }));
+      const order = seededOrder(items.length, code, true);
+      await prisma.questOrderItem.createMany({
+        data: order.map((itemIndex, position) => ({
+          questQuestionId,
+          itemKind: question.kind === "order" ? "ORDER" : "TIMELINE",
+          itemId: OPTION_LETTERS[position],
+          label: items[itemIndex].label,
+          timeLabel: items[itemIndex].timeLabel,
+          displayOrder: position + 1,
+          correctPosition: itemIndex + 1,
+        })),
+      });
+      return;
+    }
+    case "match": {
+      // Kolom kanan dikirim ke Flutter terurut berdasarkan rightId, jadi
+      // rightId diberi huruf sesuai posisi acak supaya tidak membocorkan
+      // pasangan yang benar.
+      const rightPosition = seededOrder(question.pairs.length, `${code}-right`, true);
+      await prisma.questMatchingPair.createMany({
+        data: question.pairs.map(([leftLabel, rightLabel], index) => ({
+          questQuestionId,
+          leftId: `L${index + 1}`,
+          leftLabel,
+          rightId: `R${OPTION_LETTERS[rightPosition[index]]}`,
+          rightLabel,
+          pairOrder: index + 1,
+        })),
+      });
+      return;
+    }
+  }
+}
+
+async function seedDetectiveQuestPath(
+  worldId: string,
+  skills: Record<string, { id: string }>,
+) {
+  const baseChapter = await prisma.chapter.findUnique({
+    where: { chapterCode: "DET-CH-001" },
+    select: { id: true },
+  });
+  let previousChapterId = baseChapter?.id ?? null;
+
+  for (const level of detectiveQuestLevels) {
+    const chapterData = {
+      worldId,
+      chapterNumber: level.chapterNumber,
+      title: `${level.rank}: ${level.title}`,
+      story: level.story,
+      goal: level.goal,
+      difficulty: level.chapterDifficulty,
+      estimatedDurationDays: 7,
+      recommendedSessions: level.quests.length,
+      completionIndicator: level.completionIndicator,
+      prerequisiteChapterId: previousChapterId,
+      status: MissionStatus.ACTIVE,
+    };
+    const chapter = await prisma.chapter.upsert({
+      where: { chapterCode: level.chapterCode },
+      update: chapterData,
+      create: { chapterCode: level.chapterCode, ...chapterData },
+    });
+    previousChapterId = chapter.id;
+
+    for (const questInput of level.quests) {
+      const questData = {
+        worldId,
+        chapterId: chapter.id,
+        title: questInput.title,
+        missionType: "Daily",
+        story: questInput.story,
+        objective: questInput.objective,
+        studentInstruction: questInput.instruction,
+        estimatedMinutes: level.estimatedMinutes,
+        xpRewardFirst: level.xpRewardFirst,
+        xpMultiplierSecond: 0.5,
+        xpMultiplierThirdPlus: 0.25,
+        hints: questInput.hints,
+        status: MissionStatus.ACTIVE,
+      };
+      const quest = await prisma.quest.upsert({
+        where: { code: questInput.code },
+        update: questData,
+        create: { code: questInput.code, ...questData },
+      });
+
+      const questionCodes: string[] = [];
+      for (const [index, questionInput] of questInput.questions.entries()) {
+        const code = `${questInput.code}-Q${String(index + 1).padStart(2, "0")}`;
+        questionCodes.push(code);
+        const stimulus = questionInput.stimulus ?? questInput.caseText ?? null;
+        const questionData = {
+          questId: quest.id,
+          questionType: QUEST_TYPE_BY_KIND[questionInput.kind],
+          competencyId: skills[questInput.skill].id,
+          measurementCategory: level.measurementCategory,
+          difficulty: level.questionDifficulty,
+          bloomLevel: level.bloomLevel,
+          orderNumber: index + 1,
+          // Flutter belum menampilkan stimulusText, jadi kasus ditempel ke
+          // teks soal; stimulusText tetap diisi untuk panel admin.
+          questionText: stimulus ? `${stimulus}\n\n${questionInput.text}` : questionInput.text,
+          stimulusText: stimulus,
+          instruction: QUESTION_INSTRUCTION_BY_KIND[questionInput.kind],
+          skillTags: ["detectivia", questInput.skill, `level-${level.level}`],
+          masteryPoint: level.level,
+          xpReward: level.questionXp,
+          estimatedTimeSeconds: level.secondsPerQuestion,
+          scoringConfig: questionInput.kind === "multi" ? "penaltyForWrong" : null,
+          status: QuestionStatus.ACTIVE,
+        };
+        const question = await prisma.questQuestion.upsert({
+          where: { code },
+          update: questionData,
+          create: { code, ...questionData },
+        });
+        await clearQuestQuestionChildren(question.id);
+        await createQuestQuestionChildren(question.id, code, questionInput);
+      }
+
+      // Soal lama di quest ini yang sudah tidak ada di bank soal diarsipkan
+      // (bukan dihapus) supaya jawaban siswa yang sudah tersimpan tetap utuh.
+      await prisma.questQuestion.updateMany({
+        where: { questId: quest.id, code: { notIn: questionCodes } },
+        data: { status: QuestionStatus.ARCHIVED },
+      });
+    }
   }
 }
 

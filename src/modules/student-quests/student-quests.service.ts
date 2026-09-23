@@ -50,6 +50,9 @@ type AssignmentWithQuest = Prisma.QuestAssignmentGetPayload<{ include: typeof as
 type QuestQuestionWithChildren = Prisma.QuestQuestionGetPayload<{ include: typeof questionInclude }>;
 
 const MIN_ACTIVE_QUEST_QUESTIONS = 10;
+// Skor minimal agar quest dianggap lulus dan siswa naik ke quest/chapter
+// berikutnya (lihat pickQuestForToday).
+const QUEST_PASS_SCORE = 60;
 
 @Injectable()
 export class StudentQuestsService {
@@ -98,7 +101,7 @@ export class StudentQuestsService {
       assignment &&
       assignment.quest.questions.length < MIN_ACTIVE_QUEST_QUESTIONS
     ) {
-      const replacementQuest = await this.pickQuestForToday(world.id, [assignment.questId], competencyId)
+      const replacementQuest = await this.pickQuestForToday(world.id, [assignment.questId], competencyId, studentProfileId)
         .catch(() => this.pickQuestFromAnyReadyWorld(assignment!.questId));
       if (replacementQuest.id !== assignment.questId) {
         await this.prisma.$transaction(async (tx) => {
@@ -135,7 +138,7 @@ export class StudentQuestsService {
       assignment.attempt?.status !== AttemptStatus.SUBMITTED &&
       !assignment.quest.questions.some((question) => question.competencyId === competencyId)
     ) {
-      const targetedQuest = await this.pickQuestForToday(world.id, [assignment.questId], competencyId).catch(() => null);
+      const targetedQuest = await this.pickQuestForToday(world.id, [assignment.questId], competencyId, studentProfileId).catch(() => null);
       if (targetedQuest && targetedQuest.id !== assignment.questId) {
         await this.prisma.$transaction(async (tx) => {
           if (assignment?.attempt) {
@@ -165,7 +168,7 @@ export class StudentQuestsService {
     }
 
     if (!assignment) {
-      const quest = await this.pickQuestForToday(world.id, undefined, competencyId);
+      const quest = await this.pickQuestForToday(world.id, undefined, competencyId, studentProfileId);
 
       assignment = await this.prisma.questAssignment.create({
         data: {
@@ -371,8 +374,8 @@ export class StudentQuestsService {
     }
 
     const usedQuestIds = todayAssignments.map((assignment) => assignment.questId);
-    const quest = await this.pickQuestForToday(world.id, usedQuestIds, competencyId).catch(() =>
-      this.pickQuestForToday(world.id),
+    const quest = await this.pickQuestForToday(world.id, usedQuestIds, competencyId, studentProfileId).catch(() =>
+      this.pickQuestForToday(world.id, undefined, undefined, studentProfileId),
     );
 
     const assignment = await this.prisma.questAssignment.create({
@@ -423,7 +426,12 @@ export class StudentQuestsService {
     );
     if (openAssignment) return openAssignment;
 
-    const quest = await this.pickQuestForToday(worldId, undefined, competencyId);
+    // Quest kompetensi ini yang sudah dikerjakan hari ini tidak diulang di
+    // hari yang sama (mis. gagal lalu langsung minta lagi -> quest berikutnya).
+    const todayQuestIds = existingAssignments.map((assignment) => assignment.questId);
+    const quest = await this.pickQuestForToday(worldId, todayQuestIds, competencyId, studentProfileId).catch(() =>
+      this.pickQuestForToday(worldId, undefined, competencyId, studentProfileId),
+    );
     const lastAssignment = await this.prisma.questAssignment.findFirst({
       where: { studentProfileId, worldId, assignedDate },
       orderBy: { sequenceNumber: "desc" },
@@ -638,7 +646,21 @@ export class StudentQuestsService {
     };
   }
 
-  private async pickQuestForToday(worldId: string, excludeQuestIds?: string[], competencyId?: string) {
+  /**
+   * Memilih quest berikutnya secara berjenjang: quest diurutkan per chapter
+   * (chapterNumber naik - mis. Detectivia Pemula -> Expert), lalu siswa
+   * mendapat quest PERTAMA yang belum ia lulusi (attempt SUBMITTED dengan
+   * skor >= QUEST_PASS_SCORE). Quest yang gagal otomatis muncul lagi sebagai
+   * remedial (tapi tidak di hari yang sama, karena quest hari ini masuk
+   * excludeQuestIds). Kalau semua sudah lulus - atau studentProfileId tidak
+   * diberikan - kembali ke rotasi harian lama sebagai mode latihan ulang.
+   */
+  private async pickQuestForToday(
+    worldId: string,
+    excludeQuestIds?: string[],
+    competencyId?: string,
+    studentProfileId?: string,
+  ) {
     const activeQuests = await this.prisma.quest.findMany({
       where: {
         worldId,
@@ -646,7 +668,7 @@ export class StudentQuestsService {
         ...(excludeQuestIds?.length ? { id: { notIn: excludeQuestIds } } : {}),
         questions: { some: { status: "ACTIVE", ...(competencyId ? { competencyId } : {}) } },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ chapter: { chapterNumber: { sort: "asc", nulls: "last" } } }, { createdAt: "asc" }],
       include: {
         _count: { select: { questions: { where: { status: "ACTIVE" } } } },
       },
@@ -661,8 +683,35 @@ export class StudentQuestsService {
       );
     }
 
+    if (studentProfileId) {
+      const passedQuestIds = await this.getPassedQuestIds(studentProfileId, worldId);
+      const nextQuest = readyQuests.find((quest) => !passedQuestIds.has(quest.id));
+      if (nextQuest) return nextQuest;
+    }
+
     const dayIndex = Math.floor(Date.now() / 86_400_000);
     return readyQuests[dayIndex % readyQuests.length];
+  }
+
+  private async getPassedQuestIds(studentProfileId: string, worldId: string) {
+    const submitted = await this.prisma.questAssignment.findMany({
+      where: {
+        studentProfileId,
+        worldId,
+        attempt: { status: AttemptStatus.SUBMITTED },
+      },
+      select: { questId: true, attempt: { select: { overallScore: true } } },
+    });
+    return new Set(
+      submitted
+        .filter((assignment) => {
+          const score = assignment.attempt?.overallScore;
+          // Skor null = semua soal menunggu review mentor; jangan menahan
+          // siswa di quest itu selamanya.
+          return score === null || score === undefined || Number(score) >= QUEST_PASS_SCORE;
+        })
+        .map((assignment) => assignment.questId),
+    );
   }
 
   private async pickQuestFromAnyReadyWorld(excludeQuestId?: string) {
