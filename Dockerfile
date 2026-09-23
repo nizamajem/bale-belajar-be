@@ -14,6 +14,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 RUN apk add --no-cache openssl
 COPY --from=build /app/package.json /app/package-lock.json ./
+# Dibutuhkan ts-node saat menjalankan seed/tools di container. Tanpa file ini
+# ts-node mengompilasi prisma/seed.ts sebagai ESM dan import relatif tanpa
+# ekstensi (./detective-quest-data, ./vocab-seed-data) gagal di-resolve.
+COPY --from=build /app/tsconfig.json ./tsconfig.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
