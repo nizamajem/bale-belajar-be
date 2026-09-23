@@ -18,6 +18,11 @@ import { buildVocabSeed } from "./vocab-seed-data";
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.SEED_DETECTIVE_ONLY === "true") {
+    await seedBaleDetective();
+    return;
+  }
+
   const adminPasswordHash = await bcrypt.hash("Admin123!", 12);
   const teacherPasswordHash = await bcrypt.hash("Guru123!", 12);
 
@@ -1037,6 +1042,45 @@ async function seedBaleDetective() {
     },
   ];
 
+  const buildSupportingMaterial = (moduleInput: {
+    simpleGoal: string;
+    bigIdea: string;
+    cases: Array<{
+      title: string;
+      story: string;
+      analysisSteps: string[];
+      commonMistake: string;
+    }>;
+  }) => {
+    const caseStudy = moduleInput.cases[0];
+    return [
+      {
+        type: CurriculumLessonType.CONCEPT,
+        title: "Makna konsep dalam penyelidikan",
+        body: `${moduleInput.bigIdea} Materi ini membantu kamu memahami hubungan antara informasi, bukti, dan kesimpulan sebelum menghadapi tes.`,
+        examples: [moduleInput.simpleGoal],
+        items: [],
+      },
+      {
+        type: CurriculumLessonType.EXAMPLE,
+        title: `Bedah bukti: ${caseStudy.title}`,
+        body: caseStudy.story,
+        examples: caseStudy.analysisSteps,
+        items: [],
+      },
+      {
+        type: CurriculumLessonType.CONCEPT,
+        title: "Batas kesimpulan",
+        body: `Kesimpulan hanya boleh sejauh yang didukung bukti. Kesalahan yang perlu dihindari: ${caseStudy.commonMistake}`,
+        examples: [
+          "Pisahkan hal yang sudah terbukti dari hal yang masih mungkin.",
+          "Sebutkan bukti tambahan yang dibutuhkan jika kesimpulan belum pasti.",
+        ],
+        items: [],
+      },
+    ];
+  };
+
   for (const [moduleIndex, moduleInput] of extraDetectiveModules.entries()) {
     const module = await prisma.curriculumModule.upsert({
       where: { worldId_slug: { worldId: world.id, slug: moduleInput.slug } },
@@ -1075,6 +1119,15 @@ async function seedBaleDetective() {
           orderNumber: lessonIndex + 1,
           ...lesson,
         },
+      });
+    }
+
+    for (const [materialIndex, lesson] of buildSupportingMaterial(moduleInput).entries()) {
+      const orderNumber = moduleInput.lessons.length + materialIndex + 1;
+      await prisma.curriculumLesson.upsert({
+        where: { moduleId_orderNumber: { moduleId: module.id, orderNumber } },
+        update: lesson,
+        create: { moduleId: module.id, orderNumber, ...lesson },
       });
     }
 
@@ -1397,6 +1450,15 @@ async function seedBaleDetective() {
           orderNumber: lessonIndex + 1,
           ...lesson,
         },
+      });
+    }
+
+    for (const [materialIndex, lesson] of buildSupportingMaterial(moduleInput).entries()) {
+      const orderNumber = moduleInput.lessons.length + materialIndex + 1;
+      await prisma.curriculumLesson.upsert({
+        where: { moduleId_orderNumber: { moduleId: module.id, orderNumber } },
+        update: lesson,
+        create: { moduleId: module.id, orderNumber, ...lesson },
       });
     }
 
@@ -2074,8 +2136,10 @@ async function seedBaleDetective() {
     }
   }
 
-  await seedVocab();
-  await seedVocabWorlds();
+  if (process.env.SEED_DETECTIVE_ONLY !== "true") {
+    await seedVocab();
+    await seedVocabWorlds();
+  }
 }
 
 async function seedVocab() {
