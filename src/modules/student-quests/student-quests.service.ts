@@ -62,6 +62,36 @@ export class StudentQuestsService {
     private readonly masteryService: MasteryService,
   ) {}
 
+  /** Progress only: never returns exercise answer keys. */
+  async getKoreanPath(currentUser: AuthenticatedUser) {
+    const studentProfileId = this.getStudentProfileId(currentUser);
+    const world = await this.prisma.world.findUnique({
+      where: { key: 'korean-learning' },
+      include: { chapters: { where: { status: MissionStatus.ACTIVE }, orderBy: { chapterNumber: 'asc' },
+        include: { quests: { where: { status: MissionStatus.ACTIVE }, orderBy: { code: 'asc' },
+          include: { _count: { select: { questions: { where: { status: 'ACTIVE' } } } } } } } } },
+    });
+    if (!world?.isActive) throw new NotFoundException('Jalur Korea belum diaktifkan.');
+    const passed = await this.getPassedQuestIds(studentProfileId, world.id, 75, false);
+    const lessons = world.chapters.flatMap(chapter => chapter.quests).filter(q => q._count.questions >= 10);
+    const next = lessons.find(q => !passed.has(q.id));
+    return {
+      worldKey: world.key, name: world.name, passScore: 75,
+      contentRelease: 'hangul-survival-v1', lessonCount: lessons.length,
+      completedLessonCount: lessons.filter(q => passed.has(q.id)).length,
+      nextLessonCode: next?.code ?? null,
+      units: world.chapters.map(chapter => ({ id: chapter.id, code: chapter.chapterCode,
+        levelCode: chapter.subWorldKey, levelName: chapter.subWorldName, title: chapter.title,
+        goal: chapter.goal, prerequisiteUnitId: chapter.prerequisiteChapterId,
+        lessons: chapter.quests.filter(q => q._count.questions >= 10).map(quest => ({
+          id: quest.id, code: quest.code, title: quest.title, estimatedMinutes: quest.estimatedMinutes,
+          xpReward: quest.xpRewardFirst, activityCount: quest._count.questions,
+          state: passed.has(quest.id) ? 'COMPLETED' : quest.id === next?.id ? 'AVAILABLE' : 'LOCKED',
+        })),
+      })),
+    };
+  }
+
   async getTodayQuest(currentUser: AuthenticatedUser, worldKey: string, competencyId?: string) {
     const studentProfileId = this.getStudentProfileId(currentUser);
     const world = await this.resolvePlayableWorld(worldKey);
@@ -577,7 +607,18 @@ export class StudentQuestsService {
         scoredEvaluations.length === 0
           ? 0
           : Math.round(scoredEvaluations.reduce((sum, e) => sum + e.score, 0) / scoredEvaluations.length);
-      const xpReward = freshAssignment.quest.xpRewardFirst;
+      const passScore = freshAssignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE;
+      let xpReward = freshAssignment.quest.xpRewardFirst;
+      if (freshAssignment.quest.code.startsWith('KOR-')) {
+        const previousPasses = await tx.questAssignment.count({ where: {
+          studentProfileId, questId: freshAssignment.questId,
+          attempt: { status: AttemptStatus.SUBMITTED, overallScore: { gte: passScore } },
+        } });
+        const multiplier = previousPasses === 0 ? 1 : previousPasses === 1
+          ? Number(freshAssignment.quest.xpMultiplierSecond ?? 0.5)
+          : Number(freshAssignment.quest.xpMultiplierThirdPlus ?? 0.25);
+        xpReward = overallScore >= passScore ? Math.round(xpReward * multiplier) : 0;
+      }
 
       const xpResult = await this.experienceLedgerService.appendXp(tx, {
         studentProfileId,
@@ -607,6 +648,8 @@ export class StudentQuestsService {
       return {
         attemptId,
         overallScore,
+        passScore,
+        passed: overallScore >= passScore,
         xpGained: xpReward,
         gameProfile: xpResult,
         questions: evaluations.map((evaluation) => {
@@ -632,6 +675,8 @@ export class StudentQuestsService {
       attemptId,
       title: assignment.quest.title,
       overallScore: assignment.attempt.overallScore ? Number(assignment.attempt.overallScore) : 0,
+      passScore: assignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE,
+      passed: Number(assignment.attempt.overallScore ?? 0) >= (assignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE),
       questions: assignment.quest.questions.map((question) => {
         const answer = answersByQuestionId.get(question.id);
         const evaluation: QuestAnswerEvaluationResult = {
@@ -661,15 +706,17 @@ export class StudentQuestsService {
     competencyId?: string,
     studentProfileId?: string,
   ) {
+    const world = await this.prisma.world.findUnique({ where: { id: worldId }, select: { key: true } });
+    const isKorean = world?.key === 'korean-learning';
     const activeQuests = await this.prisma.quest.findMany({
       where: {
         worldId,
         status: "ACTIVE",
-        questions: { some: { status: "ACTIVE", ...(competencyId ? { competencyId } : {}) } },
+        questions: { some: { status: "ACTIVE", ...(competencyId && !isKorean ? { competencyId } : {}) } },
       },
       orderBy: { createdAt: "asc" },
       include: {
-        chapter: { select: { chapterNumber: true } },
+        chapter: { select: { chapterNumber: true, competencies: { select: { id: true } } } },
         _count: { select: { questions: { where: { status: "ACTIVE" } } } },
       },
     });
@@ -680,14 +727,25 @@ export class StudentQuestsService {
     // urutan createdAt di dalam satu chapter tetap terjaga.
     const allReadyQuests = activeQuests
       .filter((quest) => quest._count.questions >= MIN_ACTIVE_QUEST_QUESTIONS)
-      .sort((a, b) => chapterOrder(a) - chapterOrder(b));
+      .sort((a, b) => chapterOrder(a) - chapterOrder(b) || (isKorean ? a.code.localeCompare(b.code) : 0));
     const excluded = new Set(excludeQuestIds ?? []);
-    const readyQuests = allReadyQuests.filter((quest) => !excluded.has(quest.id));
+    const readyQuests = allReadyQuests.filter((quest) => !excluded.has(quest.id) &&
+      (!isKorean || !competencyId || quest.chapter?.competencies.some(c => c.id === competencyId)));
 
     if (studentProfileId && allReadyQuests.length > 0) {
-      const passedQuestIds = await this.getPassedQuestIds(studentProfileId, worldId);
+      const passedQuestIds = await this.getPassedQuestIds(studentProfileId, worldId, isKorean ? 75 : QUEST_PASS_SCORE, !isKorean);
       const unpassed = allReadyQuests.filter((quest) => !passedQuestIds.has(quest.id));
       if (unpassed.length > 0) {
+        if (isKorean) {
+          const current = unpassed[0];
+          if (competencyId && !current.chapter?.competencies.some(c => c.id === competencyId)) {
+            const review = allReadyQuests.find(q => passedQuestIds.has(q.id) && q.chapter?.competencies.some(c => c.id === competencyId));
+            if (review) return review;
+            throw new ForbiddenException('Selesaikan lesson Korea sebelumnya dengan skor minimal 75.');
+          }
+          // Retry the failed lesson before unlocking the next one, including on the same day.
+          return current;
+        }
         // Siswa hanya bergerak di chapter terendah yang belum tuntas. Kalau
         // semua quest di chapter itu sudah dicoba hari ini (excluded), quest
         // yang belum lulus diulang - bukan loncat ke chapter berikutnya.
@@ -707,7 +765,7 @@ export class StudentQuestsService {
     return readyQuests[dayIndex % readyQuests.length];
   }
 
-  private async getPassedQuestIds(studentProfileId: string, worldId: string) {
+  private async getPassedQuestIds(studentProfileId: string, worldId: string, passScore = QUEST_PASS_SCORE, allowUnscored = true) {
     const submitted = await this.prisma.questAssignment.findMany({
       where: {
         studentProfileId,
@@ -722,7 +780,7 @@ export class StudentQuestsService {
           const score = assignment.attempt?.overallScore;
           // Skor null = semua soal menunggu review mentor; jangan menahan
           // siswa di quest itu selamanya.
-          return score === null || score === undefined || Number(score) >= QUEST_PASS_SCORE;
+          return score === null || score === undefined ? allowUnscored : Number(score) >= passScore;
         })
         .map((assignment) => assignment.questId),
     );

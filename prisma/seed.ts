@@ -16,10 +16,15 @@ import {
 import * as bcrypt from "bcrypt";
 import { detectiveQuestLevels, type DetectiveQuestion } from "./detective-quest-data";
 import { buildVocabSeed } from "./vocab-seed-data";
+import { seedKorean } from "./seed-korean";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.SEED_KOREAN_ONLY === "true") {
+    await seedKorean(prisma);
+    return;
+  }
   if (process.env.SEED_DETECTIVE_ONLY === "true") {
     await seedBaleDetective();
     return;
@@ -411,6 +416,7 @@ async function main() {
 
   await seedBaleVerse(subject.id);
   await seedBaleDetective();
+  await seedKorean(prisma);
 }
 
 async function seedBaleVerse(mtkSubjectId: string) {

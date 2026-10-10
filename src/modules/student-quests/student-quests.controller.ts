@@ -20,6 +20,12 @@ import { StudentQuestsService } from "./student-quests.service";
 export class StudentQuestsController {
   constructor(private readonly studentQuestsService: StudentQuestsService) {}
 
+  @Get("korean/path")
+  @ResponseMessage("Jalur belajar Korea berhasil diambil.")
+  getKoreanPath(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.studentQuestsService.getKoreanPath(currentUser);
+  }
+
   @Get("quests/today")
   @ResponseMessage("Quest hari ini berhasil diambil.")
   getTodayQuest(
