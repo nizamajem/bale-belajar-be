@@ -62,7 +62,7 @@ export type QuestAnswerEvaluationResult = {
   questionId: string;
   score: number | null;
   isCorrect: boolean | null;
-  evaluationStatus: "AUTO_SCORED" | "MENTOR_REVIEW_NEEDED";
+  evaluationStatus: "AUTO_SCORED" | "MENTOR_REVIEW_NEEDED" | "VALIDATED";
   detail: Record<string, unknown>;
 };
 

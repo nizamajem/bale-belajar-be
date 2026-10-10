@@ -11,6 +11,7 @@ import { GetTodayQuestQueryDto } from "./dto/get-today-quest-query.dto";
 import { SaveQuestAnswerDto } from "./dto/save-quest-answer.dto";
 import { UpdateQuestSettingDto } from "./dto/update-quest-setting.dto";
 import { StudentQuestsService } from "./student-quests.service";
+import { ReviewKoreanWritingDto } from './dto/review-korean-writing.dto';
 
 @ApiTags("Student Quests")
 @ApiBearerAuth()
@@ -19,6 +20,16 @@ import { StudentQuestsService } from "./student-quests.service";
 @Controller("student")
 export class StudentQuestsController {
   constructor(private readonly studentQuestsService: StudentQuestsService) {}
+
+  @Get('korean/writing-reviews')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  pendingWriting() { return this.studentQuestsService.listKoreanWritingReviews(); }
+
+  @Post('korean/writing-reviews/:answerId')
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  reviewWriting(@CurrentUser() user: AuthenticatedUser, @Param('answerId') answerId: string, @Body() dto: ReviewKoreanWritingDto) {
+    return this.studentQuestsService.reviewKoreanWriting(user, answerId, dto);
+  }
 
   @Get("korean/path")
   @ResponseMessage("Jalur belajar Korea berhasil diambil.")

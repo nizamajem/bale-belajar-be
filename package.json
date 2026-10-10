@@ -16,6 +16,8 @@
     "seed:korean": "node tools/seed-korean-runner.js",
     "validate:korean": "node tools/seed-korean-runner.js --validate",
     "verify:korean": "node tools/verify-korean-runner.js",
+    "verify:korean-writing": "node tools/verify-korean-writing-runner.js",
+    "verify:korean-exams": "node tools/verify-korean-exams-runner.js",
     "import:curriculum": "node prisma/import-curriculum-runner.js",
     "import:sample-curriculum": "node prisma/import-sample-curriculum-runner.js",
     "normalize:curriculum": "node prisma/normalize-curriculum-runner.js",

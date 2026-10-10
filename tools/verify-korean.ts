@@ -1,6 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { PrismaClient, UserRole } from '@prisma/client';
-import { validateKoreanCourse } from '../prisma/korean-course-data';
+import { validateKoreanCourse, koreanUnits } from '../prisma/korean-course-data';
+import { prerequisiteKoreanUnit } from '../prisma/korean-extended-data';
+import { koreanListeningChecks } from '../prisma/korean-listening-data';
 import { StudentQuestsService } from '../src/modules/student-quests/student-quests.service';
 import { WorldsService } from '../src/modules/worlds/worlds.service';
 import { evaluateQuestAnswer, QuestAnswerPayload, QuestQuestionForEvaluation } from '../src/modules/student-quests/quest-evaluation.util';
@@ -23,7 +25,8 @@ async function main() {
     assert.equal(quests.length, expected.lessons);
     assert.equal(quests.flatMap(quest => quest.questions).length, expected.questions);
     for (const [index, chapter] of world.chapters.entries()) {
-      assert.equal(chapter.prerequisiteChapterId, index ? world.chapters[index - 1].id : null);
+      const prerequisite = prerequisiteKoreanUnit(koreanUnits[index], koreanUnits[index - 1]);
+      assert.equal(chapter.prerequisiteChapterId, prerequisite ? world.chapters.find(c => c.chapterCode === prerequisite)!.id : null);
       assert.equal(chapter.quests.length, 4);
       assert.equal(chapter.chapterNumber, index + 1);
     }
@@ -46,7 +49,7 @@ async function main() {
     const types = new Set<string>();
     for (const quest of quests) {
       assert.equal(quest.status, 'ACTIVE');
-      assert.equal(quest.questions.length, 10);
+      assert.equal(quest.questions.length, /^KOR-KO0[01]-/.test(quest.code) ? 10 : 12);
       for (const [index, question] of quest.questions.entries()) {
         assert.equal(question.orderNumber, index + 1);
         assert.equal(question.competency.chapterId, quest.chapterId);
@@ -60,8 +63,22 @@ async function main() {
         const evaluationQuestion: QuestQuestionForEvaluation = { ...question,
           acceptedAnswers: question.acceptedAnswers.map(answer => ({ ...answer,
             toleranceNumeric: answer.toleranceNumeric === null ? null : Number(answer.toleranceNumeric) })) };
-        assert.equal(evaluateQuestAnswer(evaluationQuestion, payload).score, 100, question.code);
-        assert.equal(evaluateQuestAnswer(evaluationQuestion, {}).score, 0, `${question.code}: empty answer`);
+        if (question.questionType === 'LONG_TEXT') {
+          assert.equal(evaluateQuestAnswer(evaluationQuestion, { text: '자유롭게 작성한 글' }).score, null, question.code);
+          assert.equal(question.rubricCriteria.reduce((sum, criterion) => sum + Number(criterion.weightPct), 0), 100);
+        } else {
+          assert.equal(evaluateQuestAnswer(evaluationQuestion, payload).score, 100, question.code);
+          assert.equal(evaluateQuestAnswer(evaluationQuestion, {}).score, 0, `${question.code}: empty answer`);
+        }
+        if (question.questionType === 'AUDIO_CHOICE') {
+          assert.equal(question.media[0]?.mediaType, 'tts');
+          assert.ok(question.media[0]?.transcript);
+          const unitCode = quest.code.replace(/-L\d+$/, '');
+          if (koreanListeningChecks[unitCode]) {
+            assert.notEqual(question.media[0].transcript, koreanUnits.find(u => u.code === unitCode)!.extension!.passage,
+              'Advanced listening must not reveal its answer through the reading passage');
+          }
+        }
         const publicQuestion = serializer.serializeQuestionForAttempt(question, null, false);
         const serialized = JSON.stringify(publicQuestion);
         for (const key of ['isCorrect', 'correctPosition', 'correctOrder', 'sampleAnswer', 'acceptedAnswers']) {
@@ -69,10 +86,10 @@ async function main() {
         }
       }
     }
-    assert.equal(types.size, 4);
+    assert.equal(types.size, 6);
     console.log(JSON.stringify({ ...expected, types: [...types], perfectAnswers: 'passed', emptyAnswers: 'rejected',
       prerequisites: 'valid', publicPayloads: 'no answer keys', path: 'one starting lesson available',
-      appDiscovery: 'visible', appCurriculum: '28 modules and 112 supporting lessons' }, null, 2));
+      appDiscovery: 'visible', appCurriculum: `${expected.units} modules and ${expected.lessons} supporting lessons`, writing: 'human review required', independentListeningTexts: Object.keys(koreanListeningChecks).length }, null, 2));
   } finally { await prisma.$disconnect(); }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

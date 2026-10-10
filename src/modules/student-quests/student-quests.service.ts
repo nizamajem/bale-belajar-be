@@ -11,6 +11,9 @@ import { ExperienceLedgerService } from "../experience-ledger/experience-ledger.
 import { MasteryService } from "../mastery/mastery.service";
 import { SaveQuestAnswerDto } from "./dto/save-quest-answer.dto";
 import { UpdateQuestSettingDto } from "./dto/update-quest-setting.dto";
+import { availableKoreanQuests, optionalKoreanQuest } from './korean-progression.util';
+import { ReviewKoreanWritingDto } from './dto/review-korean-writing.dto';
+import { koreanExamDeadline, koreanMockMode, summarizeKoreanExam } from './korean-exam.util';
 import {
   QuestAnswerEvaluationResult,
   QuestAnswerPayload,
@@ -62,31 +65,93 @@ export class StudentQuestsService {
     private readonly masteryService: MasteryService,
   ) {}
 
+  async listKoreanWritingReviews() {
+    return this.prisma.questAnswer.findMany({ where: {
+      evaluationStatus: 'MENTOR_REVIEW_NEEDED', question: { questionType: 'LONG_TEXT', quest: { world: { key: { in: ['korean-learning', 'korean-topik-pbt', 'korean-topik-ibt'] } } } },
+      attempt: { status: AttemptStatus.SUBMITTED },
+    }, take: 100, orderBy: { createdAt: 'asc' }, include: {
+      question: { select: { questionText: true, instruction: true, rubricCriteria: true } },
+      attempt: { select: { questAssignmentId: true } },
+    } });
+  }
+
+  async reviewKoreanWriting(user: AuthenticatedUser, answerId: string, dto: ReviewKoreanWritingDto) {
+    return this.prisma.$transaction(async tx => {
+      const answer = await tx.questAnswer.findUnique({ where: { id: answerId }, include: {
+        question: { include: { rubricCriteria: true, quest: { include: { world: true, questions: { where: { status: 'ACTIVE' }, select: { id: true, scoringConfig: true } } } } } },
+        attempt: { include: { assignment: { include: { quest: true } } } },
+      } });
+      if (!answer || answer.question.questionType !== 'LONG_TEXT' || !['korean-learning', 'korean-topik-pbt', 'korean-topik-ibt'].includes(answer.question.quest.world.key)) throw new NotFoundException('Jawaban writing Korea tidak ditemukan.');
+      if (answer.attempt.status !== AttemptStatus.SUBMITTED || answer.evaluationStatus !== 'MENTOR_REVIEW_NEEDED') throw new BadRequestException('Jawaban belum disubmit atau sudah direview.');
+      const rubric = answer.question.rubricCriteria;
+      const scores = new Map(dto.criteria.map(item => [item.criterionId, item.score]));
+      if (!dto.feedback.trim() || scores.size !== rubric.length || scores.size !== dto.criteria.length || rubric.some(item => !scores.has(item.criterionId))) throw new BadRequestException('Feedback dan nilai semua kriteria rubrik wajib diisi tepat satu kali.');
+      const score = Math.round(rubric.reduce((sum, criterion) => sum + scores.get(criterion.criterionId)! * Number(criterion.weightPct) / 100, 0));
+      const updated = await tx.questAnswer.updateMany({ where: { id: answer.id, evaluationStatus: 'MENTOR_REVIEW_NEEDED' }, data: {
+        score, isCorrect: score >= 75, evaluationStatus: 'VALIDATED',
+        evaluatorDetail: { reviewerId: user.id, reviewedAt: new Date().toISOString(), feedback: dto.feedback, criteria: dto.criteria.map(c => ({ criterionId: c.criterionId, score: c.score })) },
+      } });
+      if (updated.count !== 1) throw new BadRequestException('Jawaban sudah direview.');
+      await this.masteryService.recordEvidence(tx, { studentProfileId: answer.attempt.assignment.studentProfileId,
+        competencyId: answer.question.competencyId, isCorrect: score >= 75, sourceType: 'QuestAnswer', sourceId: answer.id });
+      const answers = await tx.questAnswer.findMany({ where: { questAttemptId: answer.questAttemptId }, include: { question: { select: { questionType: true } } } });
+      const pending = answers.some(item => item.score === null);
+      const writingPassed = answers.filter(item => item.question.questionType === 'LONG_TEXT').every(item => Number(item.score ?? 0) >= 75);
+      const exam = summarizeKoreanExam(answer.question.quest.missionType, answer.question.quest.questions, answers.map(item => ({ questionId: item.questQuestionId, score: item.score === null ? null : Number(item.score) })));
+      const overallScore = exam ? exam.overallScore : pending ? null : Math.round(answers.reduce((sum, item) => sum + Number(item.score), 0) / answers.length);
+      await tx.questAttempt.update({ where: { id: answer.questAttemptId }, data: { overallScore } });
+      let xpGained = 0;
+      if (overallScore !== null && overallScore >= 75 && writingPassed) {
+        const assignment = answer.attempt.assignment;
+        const previousPasses = await tx.questAssignment.count({ where: { studentProfileId: assignment.studentProfileId, questId: assignment.questId,
+          id: { not: assignment.id }, attempt: { status: AttemptStatus.SUBMITTED, overallScore: { gte: 75 },
+            answers: { none: { OR: [{ evaluationStatus: 'MENTOR_REVIEW_NEEDED' }, { question: { questionType: 'LONG_TEXT' }, score: { lt: 75 } }] } } } } });
+        xpGained = Math.round(assignment.quest.xpRewardFirst * (previousPasses === 0 ? 1 : previousPasses === 1 ? Number(assignment.quest.xpMultiplierSecond) : Number(assignment.quest.xpMultiplierThirdPlus)));
+        await this.experienceLedgerService.appendXp(tx, { studentProfileId: assignment.studentProfileId, worldId: assignment.worldId,
+          amount: xpGained, reason: XpReason.MISSION_COMPLETED, sourceType: 'QuestAttempt', sourceId: answer.questAttemptId });
+      }
+      return { answerId, score, overallScore, exam, reviewPending: pending, passed: overallScore !== null && overallScore >= 75 && writingPassed, xpGained };
+    });
+  }
+
   /** Progress only: never returns exercise answer keys. */
   async getKoreanPath(currentUser: AuthenticatedUser) {
     const studentProfileId = this.getStudentProfileId(currentUser);
     const world = await this.prisma.world.findUnique({
       where: { key: 'korean-learning' },
       include: { chapters: { where: { status: MissionStatus.ACTIVE }, orderBy: { chapterNumber: 'asc' },
-        include: { quests: { where: { status: MissionStatus.ACTIVE }, orderBy: { code: 'asc' },
+        include: { competencies: { select: { id: true } }, quests: { where: { status: MissionStatus.ACTIVE }, orderBy: { code: 'asc' },
           include: { _count: { select: { questions: { where: { status: 'ACTIVE' } } } } } } } } },
     });
     if (!world?.isActive) throw new NotFoundException('Jalur Korea belum diaktifkan.');
     const passed = await this.getPassedQuestIds(studentProfileId, world.id, 75, false);
     const lessons = world.chapters.flatMap(chapter => chapter.quests).filter(q => q._count.questions >= 10);
-    const next = lessons.find(q => !passed.has(q.id));
+    const available = availableKoreanQuests(world.chapters.flatMap(chapter => chapter.quests
+      .filter(q => q._count.questions >= 10).map(q => ({ ...q, chapter }))), passed);
+    const availableIds = new Set(available.map(q => q.id));
+    const next = available.find(q => !optionalKoreanQuest(q.code));
+    const pending = await this.prisma.questAssignment.findMany({ where: { studentProfileId, worldId: world.id,
+      attempt: { status: AttemptStatus.SUBMITTED, answers: { some: { evaluationStatus: 'MENTOR_REVIEW_NEEDED' } } } }, select: { questId: true } });
+    const pendingIds = new Set(pending.map(item => item.questId));
+    const practiceWorlds = await this.prisma.world.findMany({ where: { isActive: true, key: { in: ['korean-topik-pbt', 'korean-topik-ibt'] } },
+      orderBy: { orderNumber: 'asc' }, include: { quests: { where: { status: 'ACTIVE' }, select: {
+        title: true, estimatedMinutes: true, missionType: true, _count: { select: { questions: { where: { status: 'ACTIVE' } } } },
+      } } } });
     return {
       worldKey: world.key, name: world.name, passScore: 75,
-      contentRelease: 'hangul-survival-v1', lessonCount: lessons.length,
+      contentRelease: 'hangul-topik6-v2', lessonCount: lessons.length,
       completedLessonCount: lessons.filter(q => passed.has(q.id)).length,
       nextLessonCode: next?.code ?? null,
+      practiceExams: practiceWorlds.flatMap(item => item.quests.map(quest => ({ worldKey: item.key,
+        title: quest.title, minutes: quest.estimatedMinutes, mode: koreanMockMode(quest.missionType), questionCount: quest._count.questions }))),
       units: world.chapters.map(chapter => ({ id: chapter.id, code: chapter.chapterCode,
+        competencyId: chapter.competencies[0]?.id, optional: optionalKoreanQuest(`${chapter.chapterCode}-L01`),
         levelCode: chapter.subWorldKey, levelName: chapter.subWorldName, title: chapter.title,
         goal: chapter.goal, prerequisiteUnitId: chapter.prerequisiteChapterId,
         lessons: chapter.quests.filter(q => q._count.questions >= 10).map(quest => ({
           id: quest.id, code: quest.code, title: quest.title, estimatedMinutes: quest.estimatedMinutes,
           xpReward: quest.xpRewardFirst, activityCount: quest._count.questions,
-          state: passed.has(quest.id) ? 'COMPLETED' : quest.id === next?.id ? 'AVAILABLE' : 'LOCKED',
+          state: passed.has(quest.id) ? 'COMPLETED' : pendingIds.has(quest.id) ? 'REVIEW_PENDING' : availableIds.has(quest.id) ? 'AVAILABLE' : 'LOCKED',
         })),
       })),
     };
@@ -465,8 +530,14 @@ export class StudentQuestsService {
     const lastAssignment = await this.prisma.questAssignment.findFirst({
       where: { studentProfileId, worldId, assignedDate },
       orderBy: { sequenceNumber: "desc" },
-      select: { sequenceNumber: true },
+      select: { sequenceNumber: true, attempt: { select: { status: true } } },
     });
+
+    if (quest.code.startsWith('KOR-')) {
+      const setting = await this.prisma.studentQuestSetting.findUnique({ where: { studentProfileId } });
+      if (lastAssignment && lastAssignment.attempt?.status !== AttemptStatus.SUBMITTED) throw new BadRequestException('Selesaikan misi yang sedang terbuka dahulu.');
+      if ((lastAssignment?.sequenceNumber ?? 0) >= (setting?.dailyQuestCount ?? 1)) throw new BadRequestException('Target misi harian sudah tercapai.');
+    }
 
     return this.prisma.questAssignment.create({
       data: {
@@ -498,10 +569,10 @@ export class StudentQuestsService {
       if (assignment.attempt.status !== AttemptStatus.IN_PROGRESS) {
         throw new BadRequestException("Quest ini sudah diselesaikan.");
       }
-      return assignment.attempt;
+      return { ...assignment.attempt, expiresAt: koreanExamDeadline(assignment.quest.missionType, assignment.attempt.startedAt) };
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const attempt = await this.prisma.$transaction(async (tx) => {
       await tx.questAssignment.update({
         where: { id: assignment.id },
         data: { status: AssignmentStatus.STARTED },
@@ -511,6 +582,7 @@ export class StudentQuestsService {
         data: { questAssignmentId: assignment.id },
       });
     });
+    return { ...attempt, expiresAt: koreanExamDeadline(assignment.quest.missionType, attempt.startedAt) };
   }
 
   async saveAnswer(
@@ -522,6 +594,8 @@ export class StudentQuestsService {
     const assignment = await this.getAssignmentForAttempt(currentUser, attemptId);
     this.ensureAttemptInProgress(assignment);
     this.ensureQuestionInQuest(assignment, questionId);
+    const deadline = koreanExamDeadline(assignment.quest.missionType, assignment.attempt?.startedAt);
+    if (deadline && new Date() >= deadline) throw new BadRequestException('Waktu simulasi habis. Kirim jawaban yang sudah tersimpan untuk melihat hasil.');
 
     const payload = (dto.payload ?? {}) as Prisma.InputJsonValue;
 
@@ -564,7 +638,15 @@ export class StudentQuestsService {
       for (const question of freshAssignment.quest.questions) {
         const existingAnswer = answersByQuestionId.get(question.id);
         const payload = (existingAnswer?.payload ?? null) as QuestAnswerPayload | null;
-        const evaluation = evaluateQuestAnswer(toEvaluationQuestion(question), payload);
+        let evaluation = evaluateQuestAnswer(toEvaluationQuestion(question), payload);
+        if (freshAssignment.quest.code.startsWith('KOR-') && question.questionType === 'LONG_TEXT') {
+          const config = JSON.parse(question.scoringConfig ?? '{}') as { minCharacters?: number; maxCharacters?: number };
+          const length = Array.from(typeof payload?.text === 'string' ? payload.text.trim() : '').length;
+          if (length < (config.minCharacters ?? 1) || length > (config.maxCharacters ?? question.maxLength ?? 5000)) {
+            if (!koreanMockMode(freshAssignment.quest.missionType)) throw new BadRequestException(`Writing wajib memenuhi ${config.minCharacters ?? 1}–${config.maxCharacters ?? question.maxLength} karakter termasuk spasi.`);
+            evaluation = { questionId: question.id, score: 0, isCorrect: false, evaluationStatus: 'AUTO_SCORED', detail: { reason: 'Writing task missing or outside requested length; no essay quality score was invented.' } };
+          }
+        }
         evaluations.push(evaluation);
 
         await tx.questAnswer.upsert({
@@ -603,8 +685,10 @@ export class StudentQuestsService {
       }
 
       const scoredEvaluations = evaluations.filter((e): e is QuestAnswerEvaluationResult & { score: number } => e.score !== null);
+      const pendingReview = evaluations.some(e => e.score === null);
+      const exam = summarizeKoreanExam(freshAssignment.quest.missionType, freshAssignment.quest.questions, evaluations);
       const overallScore =
-        scoredEvaluations.length === 0
+        exam ? exam.overallScore : pendingReview && freshAssignment.quest.code.startsWith('KOR-') ? null : scoredEvaluations.length === 0
           ? 0
           : Math.round(scoredEvaluations.reduce((sum, e) => sum + e.score, 0) / scoredEvaluations.length);
       const passScore = freshAssignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE;
@@ -612,12 +696,13 @@ export class StudentQuestsService {
       if (freshAssignment.quest.code.startsWith('KOR-')) {
         const previousPasses = await tx.questAssignment.count({ where: {
           studentProfileId, questId: freshAssignment.questId,
-          attempt: { status: AttemptStatus.SUBMITTED, overallScore: { gte: passScore } },
+          attempt: { status: AttemptStatus.SUBMITTED, overallScore: { gte: passScore },
+            answers: { none: { OR: [{ evaluationStatus: 'MENTOR_REVIEW_NEEDED' }, { question: { questionType: 'LONG_TEXT' }, score: { lt: 75 } }] } } },
         } });
         const multiplier = previousPasses === 0 ? 1 : previousPasses === 1
           ? Number(freshAssignment.quest.xpMultiplierSecond ?? 0.5)
           : Number(freshAssignment.quest.xpMultiplierThirdPlus ?? 0.25);
-        xpReward = overallScore >= passScore ? Math.round(xpReward * multiplier) : 0;
+        xpReward = overallScore !== null && overallScore >= passScore ? Math.round(xpReward * multiplier) : 0;
       }
 
       const xpResult = await this.experienceLedgerService.appendXp(tx, {
@@ -649,7 +734,9 @@ export class StudentQuestsService {
         attemptId,
         overallScore,
         passScore,
-        passed: overallScore >= passScore,
+        passed: overallScore !== null && overallScore >= passScore,
+        reviewPending: pendingReview,
+        exam,
         xpGained: xpReward,
         gameProfile: xpResult,
         questions: evaluations.map((evaluation) => {
@@ -674,16 +761,19 @@ export class StudentQuestsService {
     return {
       attemptId,
       title: assignment.quest.title,
+      exam: summarizeKoreanExam(assignment.quest.missionType, assignment.quest.questions, assignment.attempt.answers.map(a => ({ questionId: a.questQuestionId, score: a.score === null ? null : Number(a.score) }))),
       overallScore: assignment.attempt.overallScore ? Number(assignment.attempt.overallScore) : 0,
       passScore: assignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE,
-      passed: Number(assignment.attempt.overallScore ?? 0) >= (assignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE),
+      reviewPending: assignment.attempt.answers.some(a => a.evaluationStatus === 'MENTOR_REVIEW_NEEDED'),
+      passed: Number(assignment.attempt.overallScore ?? 0) >= (assignment.quest.code.startsWith('KOR-') ? 75 : QUEST_PASS_SCORE) &&
+        (!assignment.quest.code.startsWith('KOR-') || assignment.quest.questions.filter(q => q.questionType === 'LONG_TEXT').every(q => Number(answersByQuestionId.get(q.id)?.score ?? 0) >= 75)),
       questions: assignment.quest.questions.map((question) => {
         const answer = answersByQuestionId.get(question.id);
         const evaluation: QuestAnswerEvaluationResult = {
           questionId: question.id,
-          score: answer?.score ? Number(answer.score) : null,
+          score: answer?.score !== null && answer?.score !== undefined ? Number(answer.score) : null,
           isCorrect: answer?.isCorrect ?? null,
-          evaluationStatus: (answer?.evaluationStatus ?? "MENTOR_REVIEW_NEEDED") as "AUTO_SCORED" | "MENTOR_REVIEW_NEEDED",
+          evaluationStatus: answer?.evaluationStatus ?? "MENTOR_REVIEW_NEEDED",
           detail: (answer?.evaluatorDetail as Record<string, unknown>) ?? {},
         };
         return this.serializeQuestionResult(question, evaluation, answer?.payload ?? null);
@@ -707,7 +797,7 @@ export class StudentQuestsService {
     studentProfileId?: string,
   ) {
     const world = await this.prisma.world.findUnique({ where: { id: worldId }, select: { key: true } });
-    const isKorean = world?.key === 'korean-learning';
+    const isKorean = world?.key === 'korean-learning' || world?.key === 'korean-topik-pbt' || world?.key === 'korean-topik-ibt';
     const activeQuests = await this.prisma.quest.findMany({
       where: {
         worldId,
@@ -716,7 +806,7 @@ export class StudentQuestsService {
       },
       orderBy: { createdAt: "asc" },
       include: {
-        chapter: { select: { chapterNumber: true, competencies: { select: { id: true } } } },
+        chapter: { select: { chapterNumber: true, prerequisiteChapterId: true, competencies: { select: { id: true } } } },
         _count: { select: { questions: { where: { status: "ACTIVE" } } } },
       },
     });
@@ -737,11 +827,12 @@ export class StudentQuestsService {
       const unpassed = allReadyQuests.filter((quest) => !passedQuestIds.has(quest.id));
       if (unpassed.length > 0) {
         if (isKorean) {
-          const current = unpassed[0];
-          if (competencyId && !current.chapter?.competencies.some(c => c.id === competencyId)) {
-            const review = allReadyQuests.find(q => passedQuestIds.has(q.id) && q.chapter?.competencies.some(c => c.id === competencyId));
+          const available = availableKoreanQuests(allReadyQuests, passedQuestIds);
+          const current = available.find(q => competencyId ? q.chapter?.competencies.some(c => c.id === competencyId) : !optionalKoreanQuest(q.code));
+          if (!current) {
+            const review = allReadyQuests.find(q => passedQuestIds.has(q.id) && (competencyId ? q.chapter?.competencies.some(c => c.id === competencyId) : !optionalKoreanQuest(q.code)));
             if (review) return review;
-            throw new ForbiddenException('Selesaikan lesson Korea sebelumnya dengan skor minimal 75.');
+            throw new ForbiddenException('Selesaikan prasyarat dengan skor minimal 75 dan tunggu penilaian writing bila masih pending.');
           }
           // Retry the failed lesson before unlocking the next one, including on the same day.
           return current;
@@ -770,7 +861,10 @@ export class StudentQuestsService {
       where: {
         studentProfileId,
         worldId,
-        attempt: { status: AttemptStatus.SUBMITTED },
+        attempt: { status: AttemptStatus.SUBMITTED, ...(!allowUnscored ? { answers: { none: { OR: [
+          { evaluationStatus: 'MENTOR_REVIEW_NEEDED' as const },
+          { question: { questionType: 'LONG_TEXT' as const }, score: { lt: 75 } },
+        ] } } } : {}) },
       },
       select: { questId: true, attempt: { select: { overallScore: true } } },
     });
@@ -889,6 +983,7 @@ export class StudentQuestsService {
         story: assignment.quest.story,
         objective: assignment.quest.objective,
         studentInstruction: assignment.quest.studentInstruction,
+        missionType: assignment.quest.missionType,
         estimatedMinutes: assignment.quest.estimatedMinutes,
         rewardXp: assignment.quest.xpRewardFirst,
         hints: assignment.quest.hints,
@@ -897,7 +992,8 @@ export class StudentQuestsService {
           : null,
       },
       attempt: assignment.attempt
-        ? { id: assignment.attempt.id, status: assignment.attempt.status }
+        ? { id: assignment.attempt.id, status: assignment.attempt.status,
+            expiresAt: koreanExamDeadline(assignment.quest.missionType, assignment.attempt.startedAt) }
         : null,
       // Kunci jawaban (isCorrect/misconception/correctPosition/dst) sengaja
       // TIDAK dikirim di sini - baru terlihat lewat getResult() setelah
@@ -1078,6 +1174,7 @@ export class StudentQuestsService {
       // seolah sudah dinilai - frontend wajib menampilkan status "menunggu
       // review", bukan angka skor palsu.
       evaluationStatus: evaluation.evaluationStatus,
+      feedback: evaluation.evaluationStatus === 'VALIDATED' ? evaluation.detail.feedback ?? null : null,
     };
   }
 

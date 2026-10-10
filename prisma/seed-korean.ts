@@ -1,5 +1,7 @@
 import { PrismaClient, MissionStatus, QuestionStatus, WorldKind, CurriculumLessonType, CurriculumModuleStatus } from '@prisma/client';
 import { koreanUnits, buildKoreanExercises, validateKoreanCourse } from './korean-course-data';
+import { koreanLevelMetadata, prerequisiteKoreanUnit } from './korean-extended-data';
+import { seedKoreanExams } from './seed-korean-exams';
 
 /** Additive, repeatable seed. Never invokes the demo seed or changes other worlds. */
 export async function seedKorean(prisma: PrismaClient) {
@@ -8,18 +10,24 @@ export async function seedKorean(prisma: PrismaClient) {
     update: { name: 'Bahasa Korea', isActive: true },
     create: { code: 'KOR', name: 'Bahasa Korea', description: 'Pembelajaran Korea interaktif untuk peserta Indonesia.' } });
   const worldData = { subjectId: subject.id, kind: WorldKind.QUEST, name: 'Belajar Bahasa Korea',
-    characterClass: 'Korean Communicator', themeDescription: 'Hangul dan Survival Korean: pelajaran bertahap, latihan, review, dan XP.', isActive: true, orderNumber: 5 };
+    characterClass: 'Korean Communicator', themeDescription: 'Hangul hingga persiapan TOPIK II level 6: grammar, reading, listening, writing, review, dan XP.', isActive: true, orderNumber: 5 };
   const world = await prisma.world.upsert({ where: { key: 'korean-learning' }, update: worldData,
     create: { key: 'korean-learning', ...worldData } });
   let previousChapterId: string | null = null;
   let previousCompetencyId: string | null = null;
+  const seeded = new Map<string, { chapterId: string; competencyId: string }>();
   for (const [index, unit] of koreanUnits.entries()) {
     const previousUnit = koreanUnits[index - 1];
+    const difficulty = unit.level === 'KO08' && Number(unit.code.slice(-2)) <= 4 ? 'BEGINNER'
+      : unit.level === 'KO08' && Number(unit.code.slice(-2)) <= 8 ? 'INTERMEDIATE' : koreanLevelMetadata[unit.level].difficulty;
+    const prerequisite = prerequisiteKoreanUnit(unit, previousUnit);
+    previousChapterId = prerequisite ? seeded.get(prerequisite)!.chapterId : null;
+    previousCompetencyId = prerequisite ? seeded.get(prerequisite)!.competencyId : null;
     const result = await prisma.$transaction(async tx => {
       const chapterData = { worldId: world.id, subWorldKey: `KOR-${unit.level}`,
-        subWorldName: unit.level === 'KO00' ? 'Hangul Foundations' : 'Survival Korean',
+        subWorldName: koreanLevelMetadata[unit.level].name,
         chapterNumber: index + 1, title: unit.title, story: unit.goal, goal: unit.goal,
-        prerequisiteChapterId: previousChapterId, difficulty: 'BEGINNER', estimatedDurationDays: 6,
+        prerequisiteChapterId: previousChapterId, difficulty, estimatedDurationDays: 6,
         recommendedSessions: 4, completionIndicator: 'Lulus setiap lesson dengan skor minimal 75; ulangi lesson yang belum lulus.',
         bossMissionUnlockMasteryPct: 75, status: MissionStatus.ACTIVE };
       const chapter = await tx.chapter.upsert({ where: { chapterCode: unit.code }, update: chapterData,
@@ -27,6 +35,7 @@ export async function seedKorean(prisma: PrismaClient) {
       const competencyData = { chapterId: chapter.id, name: unit.title, description: unit.goal, orderNumber: index + 1, isActive: true };
       const competency = await tx.competency.upsert({ where: { subjectId_code: { subjectId: subject.id, code: `${unit.code}-C01` } },
         update: competencyData, create: { subjectId: subject.id, code: `${unit.code}-C01`, ...competencyData } });
+      await tx.competencyPrerequisite.deleteMany({ where: { competencyId: competency.id } });
       if (previousCompetencyId) await tx.competencyPrerequisite.upsert({
         where: { competencyId_prerequisiteCompetencyId: { competencyId: competency.id, prerequisiteCompetencyId: previousCompetencyId } },
         update: {}, create: { competencyId: competency.id, prerequisiteCompetencyId: previousCompetencyId } });
@@ -56,7 +65,7 @@ export async function seedKorean(prisma: PrismaClient) {
           : `${unit.explanation}\n\n${unit.words.map(w => `${w.ko} — ${w.id}`).join('\n')}\n\nContoh:\n${unit.phrases.map(p => `${p.ko} — ${p.id}`).join('\n')}\n\nPelafalan: ${unit.pronunciation}\n\nBaca contoh dengan suara sendiri. Misi: ${unit.mission}`;
         const questData = { worldId: world.id, chapterId: chapter.id, title, story: unit.goal, objective: unit.goal,
           studentInstruction: instruction, missionType: stage === 4 ? 'CHALLENGE' : 'KOREAN_LESSON',
-          estimatedMinutes: 20, xpRewardFirst: stage === 4 ? 60 : 40, xpMultiplierSecond: 0.5,
+          estimatedMinutes: stage === 4 && unit.extension ? 45 : 20, xpRewardFirst: stage === 4 ? 60 : 40, xpMultiplierSecond: 0.5,
           xpMultiplierThirdPlus: 0.25, hints: stage === 4 ? [] : [unit.pronunciation, unit.explanation], status: MissionStatus.ACTIVE };
         const quest = await tx.quest.upsert({ where: { code }, update: questData, create: { code, ...questData } });
         const exercises = buildKoreanExercises(unit, stage, previousUnit);
@@ -66,10 +75,11 @@ export async function seedKorean(prisma: PrismaClient) {
           activeCodes.push(questionCode);
           const questionData = { questId: quest.id, competencyId: competency.id, questionType: exercise.type,
             orderNumber: qIndex + 1, questionText: exercise.prompt, instruction: exercise.instruction,
-            measurementCategory: exercise.skill, difficulty: 'EASY', bloomLevel: stage === 4 ? 'APPLY' : 'UNDERSTAND',
+            measurementCategory: exercise.skill, difficulty: difficulty === 'ADVANCED' ? 'HARD' : difficulty === 'INTERMEDIATE' ? 'MEDIUM' : 'EASY', bloomLevel: exercise.skill === 'inference' ? 'ANALYZE' : stage === 4 ? 'APPLY' : 'UNDERSTAND',
             skillTags: ['korean-learning', unit.level, exercise.skill], masteryPoint: 1, xpReward: 0,
-            estimatedTimeSeconds: 60, inputMode: exercise.type === 'SHORT_TEXT' ? 'text' : null,
-            maxLength: exercise.type === 'SHORT_TEXT' ? 120 : null, caseSensitive: false,
+            estimatedTimeSeconds: exercise.type === 'LONG_TEXT' ? 1800 : 90, inputMode: ['SHORT_TEXT', 'LONG_TEXT'].includes(exercise.type) ? 'text' : null,
+            maxLength: exercise.maxCharacters ?? (exercise.type === 'SHORT_TEXT' ? 300 : null), caseSensitive: false,
+            scoringConfig: exercise.type === 'LONG_TEXT' ? JSON.stringify({ minCharacters: exercise.minCharacters, maxCharacters: exercise.maxCharacters, manualReview: true }) : null,
             sampleAnswer: exercise.answer ?? exercise.tokens?.join(' ') ?? null, status: QuestionStatus.ACTIVE };
           const question = await tx.questQuestion.upsert({ where: { code: questionCode }, update: questionData,
             create: { code: questionCode, ...questionData } });
@@ -78,6 +88,14 @@ export async function seedKorean(prisma: PrismaClient) {
           await tx.questMatchingPair.deleteMany({ where: { questQuestionId: question.id } });
           await tx.questOrderItem.deleteMany({ where: { questQuestionId: question.id } });
           await tx.questAcceptedAnswer.deleteMany({ where: { questQuestionId: question.id } });
+          await tx.questMedia.deleteMany({ where: { questQuestionId: question.id } });
+          await tx.questRubricCriterion.deleteMany({ where: { questQuestionId: question.id } });
+          if (exercise.audioScript) await tx.questMedia.create({ data: { questQuestionId: question.id,
+            mediaType: 'tts', url: 'tts:ko-KR', transcriptAvailable: false, transcript: exercise.audioScript } });
+          if (exercise.rubric) await tx.questRubricCriterion.createMany({ data: exercise.rubric.map(([criterionId, criterion, weightPct]) => ({
+            questQuestionId: question.id, criterionId, criterion, weightPct,
+            criterionDescription: 'Reviewer menilai 0–100; skor tertimbang sesuai bobot. Nilai 0: belum memenuhi; 50: sebagian; 100: lengkap dan akurat.',
+            scoreDescriptions: { '0': 'Belum memenuhi', '50': 'Sebagian memenuhi', '100': 'Lengkap dan akurat' } })) });
           if (exercise.choices) {
             const shift = (qIndex + stage) % exercise.choices.length;
             const options = exercise.choices.map((label, optionIndex) => ({ questQuestionId: question.id,
@@ -99,9 +117,9 @@ export async function seedKorean(prisma: PrismaClient) {
       }
       return { chapterId: chapter.id, competencyId: competency.id };
     }, { timeout: 60_000 });
-    previousChapterId = result.chapterId;
-    previousCompetencyId = result.competencyId;
+    seeded.set(unit.code, result);
   }
   console.log(`Korean course seeded: ${summary.units} units, ${summary.lessons} lessons, ${summary.questions} activities (world=korean-learning).`);
+  await seedKoreanExams(prisma, subject.id);
   return summary;
 }

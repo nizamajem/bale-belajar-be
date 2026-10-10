@@ -1,4 +1,5 @@
 import { StudentQuestsService } from './student-quests.service';
+import { availableKoreanQuests, optionalKoreanQuest } from './korean-progression.util';
 
 describe('Korean lesson progression', () => {
   function setup(scores: Array<{ id: string; score: number | null }> = []) {
@@ -26,6 +27,25 @@ describe('Korean lesson progression', () => {
     expect((await setup([{ id: 'L01', score: null }]).picker.pickQuestForToday('world', undefined, undefined, 'student')).id).toBe('L01');
   });
   it('rejects a request that tries to skip ahead using a competency filter', async () => {
-    await expect(setup().picker.pickQuestForToday('world', undefined, 'future-skill', 'student')).rejects.toThrow('Selesaikan lesson Korea sebelumnya');
+    await expect(setup().picker.pickQuestForToday('world', undefined, 'future-skill', 'student')).rejects.toThrow('Selesaikan prasyarat');
+  });
+  it('unlocks independent branches only when their prerequisite chapter is complete', () => {
+    const quests = [
+      { id: 'a1', chapterId: 'a', chapter: { prerequisiteChapterId: null } },
+      { id: 'a2', chapterId: 'a', chapter: { prerequisiteChapterId: null } },
+      { id: 'b1', chapterId: 'b', chapter: { prerequisiteChapterId: 'a' } },
+      { id: 'c1', chapterId: 'c', chapter: { prerequisiteChapterId: 'a' } },
+      { id: 'd1', chapterId: 'd', chapter: { prerequisiteChapterId: 'b' } },
+    ];
+    expect(availableKoreanQuests(quests, new Set(['a1'])).map(q => q.id)).toEqual(['a2']);
+    expect(availableKoreanQuests(quests, new Set(['a1', 'a2'])).map(q => q.id)).toEqual(['b1', 'c1']);
+    expect(availableKoreanQuests(quests, new Set(['a1', 'a2', 'b1'])).map(q => q.id)).toEqual(['c1', 'd1']);
+  });
+  it('keeps professional and TOPIK I branches optional for the advanced core path', () => {
+    expect(optionalKoreanQuest('KOR-KO05-U01-L01')).toBe(true);
+    expect(optionalKoreanQuest('KOR-KO06-U14-L04')).toBe(true);
+    expect(optionalKoreanQuest('KOR-KO08-U04-L04')).toBe(true);
+    expect(optionalKoreanQuest('KOR-KO08-U05-L01')).toBe(false);
+    expect(optionalKoreanQuest('KOR-KO07-U01-L01')).toBe(false);
   });
 });
